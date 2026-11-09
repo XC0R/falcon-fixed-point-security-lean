@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this formalisation, please cite it and the paper it formalises."
+title: "FalconPrecision: kernel-checked security of fixed-point Falcon signing"
+authors:
+  - alias: XC0R
+license: Apache-2.0
+version: 0.1.0
+date-released: "2026-11-09"
+repository-code: "https://github.com/XC0R/falcon-fixed-point-security-lean"
+references:
+  - type: article
+    title: "Toward a Secure Fixed-Point Implementation of the Falcon Signature Scheme"
+    authors:
+      - family-names: "De Almeida Braga"
+        given-names: Daniel
+      - family-names: Fouque
+        given-names: Pierre-Alain
+      - family-names: Lachguel
+        given-names: Bachir
+      - family-names: Prest
+        given-names: Thomas
+    journal: "IACR Cryptology ePrint Archive"
+    year: 2026
+    notes: "Report 2026/1531"
+    url: "https://eprint.iacr.org/2026/1531"
+  - type: software
+    title: VCVio
+    authors:
+      - name: "VCVio contributors"
+    url: "https://github.com/Verified-zkEVM/VCV-io"
+    commit: c2192f887572f92312e5312e992670f230f1d1d8
+  - type: software
+    title: Mathlib
+    authors:
+      - name: "The Mathlib Community"
+    url: "https://github.com/leanprover-community/mathlib4"
