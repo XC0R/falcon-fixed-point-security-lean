@@ -4,8 +4,8 @@ title: "FalconPrecision: kernel-checked security of fixed-point Falcon signing"
 authors:
   - alias: XC0R
 license: Apache-2.0
-version: 0.1.0
-date-released: "2026-11-09"
+version: 0.2.0
+date-released: "2026-11-10"
 repository-code: "https://github.com/XC0R/falcon-fixed-point-security-lean"
 references:
   - type: article
@@ -28,7 +28,7 @@ references:
     authors:
       - name: "VCVio contributors"
     url: "https://github.com/Verified-zkEVM/VCV-io"
-    commit: c2192f887572f92312e5312e992670f230f1d1d8
+    commit: e7770ef7e042e91fecf94504fcf1d448f372109e
   - type: software
     title: Mathlib
     authors:

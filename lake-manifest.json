@@ -7,10 +7,10 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "c2192f887572f92312e5312e992670f230f1d1d8",
+   "rev": "e7770ef7e042e91fecf94504fcf1d448f372109e",
    "name": "VCVio",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "c2192f887572f92312e5312e992670f230f1d1d8",
+   "inputRev": "e7770ef7e042e91fecf94504fcf1d448f372109e",
    "inherited": false,
    "configFile": "lakefile.lean"
   },
@@ -31,10 +31,10 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "901aaab7967ceecd2240d0b38bbde7cf3e2c14ac",
+   "rev": "9bc93ed50a76d62b509dc1926638118e7b5cf5fe",
    "name": "QuantumFoundations",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "901aaab7967ceecd2240d0b38bbde7cf3e2c14ac",
+   "inputRev": "9bc93ed50a76d62b509dc1926638118e7b5cf5fe",
    "inherited": true,
    "configFile": "lakefile.toml"
   },
@@ -43,10 +43,10 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "d3ec3a414c233203e2050ed0f33fae8647f57eb7",
+   "rev": "ea3b29785cba402588ea79a1b71bfedc2cfaff49",
    "name": "PolyFun",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "d3ec3a414c233203e2050ed0f33fae8647f57eb7",
+   "inputRev": "ea3b29785cba402588ea79a1b71bfedc2cfaff49",
    "inherited": true,
    "configFile": "lakefile.toml"
   },
@@ -162,3 +162,4 @@
  "name": "FalconPrecision",
  "lakeDir": ".lake"
 }
+
