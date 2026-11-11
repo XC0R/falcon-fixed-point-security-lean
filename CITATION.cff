@@ -4,8 +4,8 @@ title: "FalconPrecision: kernel-checked security of fixed-point Falcon signing"
 authors:
   - alias: XC0R
 license: Apache-2.0
-version: 0.3.0
-date-released: "2026-11-10"
+version: 0.4.0
+date-released: "2026-11-11"
 repository-code: "https://github.com/XC0R/falcon-fixed-point-security-lean"
 references:
   - type: article

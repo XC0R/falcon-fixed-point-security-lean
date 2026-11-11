@@ -28,6 +28,12 @@ Release 0.3.0 (stage S8) adds, for Falcon-512, the same model for the non-split 
 (F), and fixed-point signing without them (F′), are related to abort-free exact signing on the stored tree (X), with
 an explicit `2⁻¹⁴⁰` per side. See [S8 results](#s8-results-falcon-512) and [S8](#s8) under Assumptions and limits.
 
+Release 0.4.0 (hop B) adds, for Falcon-512, the step from the stored tree to the true tree: abort-free exact signing
+on the stored tree (X) is related to exact Falcon signing (Y), ffSampling on the exact ffLDL⋆ tree of the basis
+`B = [[g, −f], [G, −F]]`, and, composed with S8, check-free fixed-point signing (F′) is related to Y. The relation
+between the two trees is a hypothesis on every key (`Close δ`); no model of key expansion is formalised. See
+[Hop B results](#hop-b-results-falcon-512) and [Hop B](#hop-b) under Assumptions and limits.
+
 Scope: the theorems are proved for leaf standard deviations in `[1.277, 2]` (both Falcon parameter sets have
 `σmin ≥ 1.2778`, `σmax = 1.8205`), with explicit conditions in place of the paper's smoothing-parameter hypotheses
 (`σmin ≥ √(1+3αΔσ)·ηϵ(Z)`, `αΔσ ≤ 1/8`); leaf errors enter as `|1/σ̄ᵢ² − 1/σᵢ²|` (the instances convert from the
@@ -125,9 +131,38 @@ sides; the values, not proved, are about `2⁻¹⁴³·⁹` (E side) and `2⁻¹
 - Hypotheses beyond those of `falcon512_model64(n)`: every stored tree is real (`FTree.Real`, carried by `Swap`);
   for `falcon512_exact64(n)'`, every auxiliary answer type is inhabited.
 
+### Hop B results (Falcon-512)
+
+The experiment `oe` makes auxiliary queries and signing-oracle queries on keys passing `KeyB.Good δ` (stored tree
+real, `Close δ` to the true tree); `K` bounds its signing-oracle calls (one ffSampling call each, restarts included)
+along every execution. X is abort-free exact signing on the stored tree (`runX` under `implE`, as in S8;
+`falcon512_hopB` states X as `runB` under `implF`, the same distribution by `relabel_X`). Hop A is S8's step from F′
+to X (`falcon512_exact64n'`). Y is exact Falcon signing: ffSampling (Alg. 8) on `KeyB.trueTree`, the exact ffLDL⋆
+(Alg. 5) of `B·B⋆` with leaves `σ/√D` (`runT` under `implE`). F′ is check-free Type 1 signing on the stored tree
+(`runX` under `implF`, as in S8). `Close δ`: `‖ℓ̂ − ℓ‖∞ ≤ δ L` at every node of depth `L + 1` (leaves at depth 0,
+the root at depth 9); at every leaf `|σ̄/σ − 1| ≤ 2⁻⁴²` and the true leaf in `[1.2778, 1.825]`. `s2B y δ` bounds
+the sum of squared centre differences `(t̄ − t)²` of one signing call between the two trees when every SamplerZ
+answer lies within `y` of its true centre. All four theorems take SamplerZ perfect in every world (`hE`, `hM`, `hF`);
+the last three take a Type 1 arithmetic `ρ : Arith64 (1/2⁷⁸)` and every auxiliary answer type inhabited (the
+hypotheses of `falcon512_exact64n'`).
+
+| Lean | Worlds | Statement | Tree error |
+|---|---|---|---|
+| `Errors.HopB.falcon512_hopB` | X ⇒ Y | `K ≤ 2³⁹`: `T·2⁻¹²⁹ + 2⁻¹⁴¹ < Pr_X[s] ⇒ T·2⁻¹³¹ < Pr_Y[s] + 2⁻¹⁴¹` | any `δ` with `K·s2B 30.5 δ ≤ 2⁻⁹` |
+| `Errors.HopB.falcon512_fixed_vs_true` | F′ ⇒ Y (hop A, then hop B) | `K ≤ 2³⁹`: `T·2⁻¹²⁶ + 2⁻¹⁴⁰ < Pr_F′[s] ⇒ T·2⁻¹³¹ < Pr_Y[s] + 2⁻¹⁴¹` | any `δ` with `K·s2B 30.5 δ ≤ 2⁻⁹` |
+| `Errors.HopB.falcon512_fixed_vs_true127` | F′ ⇒ Y | `K ≤ 2³⁹`: as `falcon512_fixed_vs_true` | assumed (`Close δ127`): `2⁻⁵⁸` at the root, `2⁻⁶³` below (`2³⁹·s2B 30.5 δ127 ≤ 2⁻⁹` proved) |
+| `Errors.HopB.falcon512_fixed_vs_true63` | F′ ⇒ Y | `K ≤ 2³⁰`: as `falcon512_fixed_vs_true` | assumed (`Close δ63`): `0.8123·2⁻⁴⁰` at the root, `0.7072·2⁻⁴¹` below (`2³⁰·s2B 30.5 δ63 ≤ 2⁻⁹` proved) |
+
+`Pr_W[s]` is the probability that `oe` run in world W lands in `s`; `T ≥ 1` is arbitrary. Hop B runs Theorem 2 at
+`λ = 131` (at most `2⁴⁹` SamplerZ calls, `|1/σ̄² − 1/σ²| ≤ 2⁻⁴⁰` per call, squared centre differences `≤ 2⁻⁹`
+along every execution) on a run whose SamplerZ answers are clamped to within `30.5` of the true centres; the clamp
+costs `≤ 2⁻¹⁴¹` in X and in Y. Composed with hop A (`falcon512_exact64n'`), F′ against Y loses 5 bits (`2⁻¹²⁶` to
+`2⁻¹³¹`). The values, not proved, are about `2⁻³⁶·⁵` (`2³⁹·s2B 30.5 δ127`) and `2⁻⁹·⁴⁹` (`2³⁰·s2B 30.5 δ63`).
+
 `test/Axioms.lean` and `test/S7Axioms.lean` check with `#guard_msgs` that each theorem above
-(`discreteGaussianSum_eq_fourier` through `discreteGaussianSum_mem`, which rewrites with it) depends only on
-`propext`, `Classical.choice` and `Quot.sound`; `lake build Axioms` fails otherwise.
+(`discreteGaussianSum_eq_fourier` through `discreteGaussianSum_mem`, which rewrites with it; the hop B theorems in
+`test/S7Axioms.lean`) depends only on `propext`, `Classical.choice` and `Quot.sound`; `lake build Axioms` fails
+otherwise.
 
 ### Form of the security statements
 
@@ -186,8 +221,8 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   in addition to the leaf and center bounds. The paper makes the same assumption implicitly.
 - The error bounds on leaves and centers (or their sums along executions) are hypotheses of `theorem1`, `theorem2`,
   `falcon512`, `falcon1024`, `falcon512_rmse` and `falcon512_proved`, as in the paper; proving them for a fixed-point
-  implementation is the paper's stated open problem. S7 and S8 prove the call count and the center sum for their signing
-  models only, within the limits below.
+  implementation is the paper's stated open problem. S7, S8 and hop B prove the call count and the center sum for
+  their signing models only, within the limits below.
 - `oa` is a finite term: signing restarts are capped, and the hypotheses range over every history, so out-of-range
   samples must abort or clamp identically in the three worlds. Relating this experiment to uncapped Falcon is not
   formalised (the paper's `c` and "for any history" leave the same gap).
@@ -200,8 +235,9 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   aborts, `Pr_X[s] ≥ Pr_E[s] − Pr_E[abort]` (a coupling argument, not formalised for S7); the tree-only bound of S8
   (route B′) is vacuous at `2²¹`, so against abort-free exact signing the 128-bit statement does not follow for the S7
   model. S8 bounds it for the Type 1 model at `R64 = 2²⁴`.
-- Hop B (stored tree to true tree: center shift `(t1 − z1)(ℓ̂ − ℓ)`, leaves `σ̄ → σ`) is not proved, so S7 states
-  nothing relative to exact Falcon.
+- Hop B (stored tree to true tree: center shift `(t1 − z1)(ℓ̂ − ℓ)`, leaves `σ̄ → σ`) starts from abort-free exact
+  signing on the stored tree (X); the S7 model is not related to X (abort gap above), so S7 states nothing relative
+  to exact Falcon.
 - Keys are those of the paper's modified NTRUGen (Alg. 2), not Falcon round 3 or FIPS 206 draft keys; `Key`'s
   exact-FFT bounds hold only up to keygen's fixed-point rounding (not formalised).
 - SamplerZ is perfect (`hE`, `hM`, `hF`).
@@ -239,15 +275,40 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
 - `FTree.Real` (every stored `ℓ̂` the FFT of a real polynomial) is a hypothesis: it holds by construction with
   half-spectrum storage or sign-symmetric rounding; full-spectrum storage rounded ties-up can violate it at ties.
   The `ℓ̂` bounds of `FTree` remain checks added by the model.
-- Hop B, keys (modified NTRUGen, `Key`'s bounds up to keygen's rounding), the perfect sampler, the stored tree (its
-  computation is not modelled and nothing ties it to the key), recovering `z` from the computed FFT form (not
-  modelled), the norm check and restarts (integer code on `z` in `oa`), the absence of a UF-CMA game and of overflow
-  modelling are as in S7. In 32.64 the checked values fit the integer bits on paper; the unchecked even merge inputs,
-  merge sums and the line-10 operand are not covered.
+- Keys (modified NTRUGen, `Key`'s bounds up to keygen's rounding), the perfect sampler, the stored tree (its
+  computation is not modelled; only the hypothesis `Close δ` of hop B ties it to the key), recovering `z` from the
+  computed FFT form (not modelled), the norm check and restarts (integer code on `z` in `oa`), the absence of a
+  UF-CMA game and of overflow modelling are as in S7. In 32.64 the checked values fit the integer bits on paper; the
+  unchecked even merge inputs, merge sums and the line-10 operand are not covered.
 - `falcon512_exact64(n)'` (through `etvDist_F_F'`) assume every auxiliary answer type is inhabited (`Nonempty`).
 - Falcon-512 only.
 
-Open: hop B; the multiply-first order; the split path; Falcon-1024.
+### Hop B
+
+- Assumed on every signing key (`KeyB.Good δ`): the stored tree is real (`FTree.Real`, as in S8) and `Close δ` holds:
+  the stored tree within `δ` of the true tree (`‖ℓ̂ − ℓ‖∞ ≤ δ L` at depth `L + 1`, `|σ̄/σ − 1| ≤ 2⁻⁴²` at every
+  leaf), and the true leaves in `[1.2778, 1.825]`.
+- `δ127` (`2⁻⁵⁸` at the root, `2⁻⁶³` below) is a target value for a key expansion at `p = 127` stored in 64-bit
+  words; no such key expansion exists in Lean. The constants of `δ63` (`0.8123·2⁻⁴⁰` at the root, `0.7072·2⁻⁴¹`
+  below) are numerical estimates, not proved. For `δ63`, the leaf condition has the form of `LDL.falcon512_leaf`,
+  which is conditional on its own hypotheses and whose tree is not tied to `KeyB.trueTree` in Lean.
+- SamplerZ is perfect in every world (`hE`, `hM`, `hF`). The composed theorems take all hypotheses of hop A
+  (`falcon512_exact64n'`: `εq = 2⁻⁷⁸`, every auxiliary answer type inhabited) and start from F′; F (with the model's
+  range checks) and `εq = 2⁻⁶⁵` are not composed with hop B.
+- `K` counts signing-oracle calls (one ffSampling call each, restarts included) along every execution. `K ≤ 2³⁹` is
+  hop A's cap; hop B uses it for its clamp costs and the `2⁴⁹` SamplerZ calls of Theorem 2 at `λ = 131`. In hop A it
+  enters through the centre budget (`2³⁹·(49·0.54·2⁻³² + 43700·2⁻⁴⁰)² ≤ 2⁻⁹`), the SamplerZ call count of Theorem 2
+  and the clamp costs (`2·p(30)·1024K`, `2·p_F(29.9)·1024K ≤ 2⁻¹⁴⁰`); hop B's centre budget at `δ127` is not the
+  limit (about `2⁻³⁶·⁵` against `2⁻⁹`).
+- The clamp at `y = 30.5` (every SamplerZ answer within `30.5` of its true centre) is a proof device; no signer
+  clamps. It costs `≤ 2⁻¹⁴¹` in X and in Y; in the composed theorems the X side is absorbed into
+  `T·2⁻¹²⁸ ≥ T·2⁻¹²⁹ + 2⁻¹⁴¹ + 2⁻¹⁴⁰`.
+- Not proved: a model of key expansion giving `Close δ` (at `p = 127` or `p = 63`); NTRUSolve (nothing ties `g, G`
+  to `f, F`; `fG − gF = q` is not assumed); the range `[1.2778, 1.825]` of the true leaves (paper §4.1, from
+  `αGPV ≤ 1.17`); any query bound above `2³⁹`; and what S8 does not prove.
+
+Open: a model of key expansion giving `Close δ`; NTRUSolve; the range of the true leaves; query bounds above `2³⁹`; the
+multiply-first order; the split path; Falcon-1024.
 
 ## Building
 
@@ -256,7 +317,7 @@ Requires [elan](https://github.com/leanprover/elan). The toolchain and the VCVio
 
 ```sh
 lake exe cache get   # optional: download Mathlib's build cache
-lake build           # every module, including S7 and S8 (FalconPrecision/Errors, by glob)
+lake build           # every module, including S7, S8 and hop B (FalconPrecision/Errors, by glob)
 lake build Axioms    # guarded #print axioms (test/Axioms.lean, test/S7Axioms.lean) and the end-to-end example
 ```
 
@@ -268,10 +329,11 @@ Both commands have been run on x86_64 and aarch64; every guarded `#print axioms`
 Developed with Claude Code (Anthropic) under the direction of XC0R. Every theorem named above is checked by the
 Lean kernel; `lake build` and `lake build Axioms` re-check them without trusting how they were produced.
 
-Changes since 0.2.0 (statements of 0.2.0 unchanged): `Errors.FFSamp.Uses` is a `def` over `UsesG`, so its
-constructors are `UsesG.pure`, `UsesG.query`, `UsesG.sign`; `ffs`, `splitC`, `mergeC`, `updC` and `join` are
+Changes since 0.2.0 (statements of 0.2.0 unchanged): in 0.3.0, `Errors.FFSamp.Uses` is a `def` over `UsesG`, so
+its constructors are `UsesG.pure`, `UsesG.query`, `UsesG.sign`; `ffs`, `splitC`, `mergeC`, `updC` and `join` are
 abbreviations of `ffsU` (through `ffsG`), `splitCU`, `mergeCU`, `updCU` and `joinU`, so their equation lemmas
-differ; `InB` and `InC` are defined through `InBR` and `InCR`.
+differ; `InB` and `InC` are defined through `InBR` and `InCR`. 0.4.0 adds the modules `Errors.HopBCore` and
+`Errors.HopB` and changes no earlier module; `test/S7Axioms.lean` guards the four hop B theorems.
 
 ## License
 

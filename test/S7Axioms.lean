@@ -11,6 +11,7 @@ import FalconPrecision.Errors.GaussTail
 import FalconPrecision.Errors.AbortTV
 import FalconPrecision.Errors.FFTReal
 import FalconPrecision.Errors.AbortExact
+import FalconPrecision.Errors.HopB
 
 /-- info: 'FalconPrecision.Falcon.falcon512_proved' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
@@ -519,3 +520,19 @@ import FalconPrecision.Errors.AbortExact
 /-- info: 'FalconPrecision.Falcon.falcon512_exact64'' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms FalconPrecision.Falcon.falcon512_exact64'
+
+/-- info: 'FalconPrecision.Errors.HopB.falcon512_hopB' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.HopB.falcon512_hopB
+
+/-- info: 'FalconPrecision.Errors.HopB.falcon512_fixed_vs_true' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.HopB.falcon512_fixed_vs_true
+
+/-- info: 'FalconPrecision.Errors.HopB.falcon512_fixed_vs_true127' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.HopB.falcon512_fixed_vs_true127
+
+/-- info: 'FalconPrecision.Errors.HopB.falcon512_fixed_vs_true63' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.HopB.falcon512_fixed_vs_true63
