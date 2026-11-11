@@ -23,6 +23,11 @@ from per-operation rounding bounds, and an execution model of signing in which t
 (`Falcon.falcon512_model`). Its reference world is exact signing on the stored tree, not exact Falcon; see [S7](#s7)
 under Assumptions and limits.
 
+Release 0.3.0 (stage S8) adds, for Falcon-512, the same model for the non-split scale-first Type 1 chain of ePrint
+2026/2431 §3.1 at 64 fractional bits, and bounds the abort gap of that model: signing with the model's range checks
+(F), and fixed-point signing without them (F′), are related to abort-free exact signing on the stored tree (X), with
+an explicit `2⁻¹⁴⁰` per side. See [S8 results](#s8-results-falcon-512) and [S8](#s8) under Assumptions and limits.
+
 Scope: the theorems are proved for leaf standard deviations in `[1.277, 2]` (both Falcon parameter sets have
 `σmin ≥ 1.2778`, `σmax = 1.8205`), with explicit conditions in place of the paper's smoothing-parameter hypotheses
 (`σmin ≥ √(1+3αΔσ)·ηϵ(Z)`, `αΔσ ≤ 1/8`); leaf errors enter as `|1/σ̄ᵢ² − 1/σᵢ²|` (the instances convert from the
@@ -76,6 +81,49 @@ measured RMSE gives over `2n·Qs = 2⁷⁰` calls (no restarts).
 | `RenyiPath.PathSum.bind`, `PathSumP.bind` | (Lemma 16 budgets) | path budgets add along `>>=` |
 | `RenyiPath.BlockPath.pathSum` | (Lemma 16 budgets) | `K` blocks with path sum `≤ c` each give path sum `≤ K·c` |
 | `Errors.Fixed.Rnd.arith` | §7.2 | rounding within `½` ulp at every operation is an `Arith` (`Arith` is inhabited) |
+
+### S8 results (Falcon-512)
+
+`ρ : Arith64 εq` is a Type 1 arithmetic at 64 fractional bits (every operation at ulp `2⁻⁶⁴`, twiddle tables within
+`0.7072·2⁻⁶⁴`, the stored `1/q` within `εq`). `sign164 ρ k c` is the scale-first target `((−ĉ/q)⊙F̂, (ĉ/q)⊙f̂)`
+with `ĉ = FFT(c)` from the integers `c`, then ffSampling with range checks `‖·‖ ≤ R64 − 1`, `R64 = 2²⁴`, on the
+computed split inputs and odd merge inputs. `sign164G ρ (fun _ _ _ => True)` is the same computation with no checks.
+
+| Lean | Statement |
+|---|---|
+| `Errors.FFSamp.input_err64`, `inp64_base`, `inp64_norm` | ℓ2 input error of ffSampling `≤ 3.3·2⁻³²` (`1/q` within `2⁻⁶⁵`), `≤ 0.54·2⁻³²` (`1/q` within `2⁻⁷⁸`) |
+| `Falcon.falcon512_model64`, `falcon512_model64n` | F ⇒ E (E: exact stored-tree signing with the same aborts) for `K ≤ 2³⁸` (`εq = 2⁻⁶⁵`), `K ≤ 2³⁹` (`εq = 2⁻⁷⁸`) calls of `sign164`; `hN`, `hS₂` proved |
+| `Errors.FFSamp.sign164_eq_margin` | while the checks pass, every checked computed value is within `1` of its exact value |
+| `Errors.GaussTail.measure_abs_ge_le`, `kappa_falcon` | `P[\|z − c\| ≥ r] ≤ 2κ(σ)exp(−r²/(2σ²))` for `D_{Z,σ,c}` at any centre; `κ(σ) ≤ 1 + 2⁻³⁶` for `σ ≥ 1.277` |
+| `Errors.AbortTV.etvDist_simulateQ_le_path` | total variation along executions `≤ c·S` for per-query bounds `c·w` and a path sum `≤ S` |
+| `RenyiPath.etvDist_simulateQ_rewrite` | the same against a run whose answers are post-processed, the path sum taken along the post-processed run |
+| `Errors.AbortExact.ffsG_clamp` | with every SamplerZ answer within `30` of its exact centre and a real stored tree, every checked exact value is `≤ 2²⁴ − 2`, so no check that passes there fires |
+| `Errors.AbortExact.etvDist_E_X`, `eps_le` | `\|Pr_E[oa ∈ s] − Pr_X[ox ∈ s]\| ≤ 2·p(30)·1024K ≤ 2⁻¹⁴⁰` for `K ≤ 2³⁹` |
+| `Errors.AbortExact.etvDist_F_F'`, `eps_leF` | `\|Pr_F[oa ∈ s] − Pr_F′[ox ∈ s]\| ≤ 2·p_F(29.9)·1024K ≤ 2⁻¹⁴⁰` for `K ≤ 2³⁹` with centre budget `K·(49e + 43700·2⁻⁴⁰)² ≤ 2⁻⁸` (both `εq` above) |
+| `Falcon.falcon512_exact64`, `falcon512_exact64n` | `T·2⁻¹²⁶ < Pr_F[oa ∈ s] ⇒ T·2⁻¹²⁸ < Pr_X[ox ∈ s] + 2⁻¹⁴⁰` (`K ≤ 2³⁸`, resp. `2³⁹`) |
+| `Falcon.falcon512_exact64'`, `falcon512_exact64n'` | `T·2⁻¹²⁶ + 2⁻¹⁴⁰ < Pr_F′[ox ∈ s] ⇒ T·2⁻¹²⁸ < Pr_X[ox ∈ s] + 2⁻¹⁴⁰` (`K ≤ 2³⁸`, resp. `2³⁹`) |
+| `Errors.AbortExact.Swap.signLoopG` | a signing loop (spec Alg. 10 l. 4-11) and its abort-free version satisfy `Swap` |
+
+`p(y) = 2(1 + 2⁻³⁶)exp(−y²/(2·1.825²))` and `p_F(y)` the same with `1.826`. The proved constant is `2⁻¹⁴⁰` on both
+sides; the values, not proved, are about `2⁻¹⁴³·⁹` (E side) and `2⁻¹⁴²·⁴` (F side) at `K = 2³⁹`.
+
+### Form of the S8 statements
+
+- X runs `ox`, the experiment `oa` with each of its at most `K` calls of `sign164` replaced by
+  `sign164G ρ (fun _ _ _ => True)` (`Swap`); its SamplerZ calls are answered by `D_{σ,t}`, so the computed centres
+  they carry play no role. X, like every world, returns `⊥` for `c` with some `|c i| ≥ q`; HashToPoint outputs
+  satisfy `|c i| < q`.
+- F′ runs the same `ox`, answered by `D_{σ̄,t̄}`: fixed-point signing with no range checks.
+- E side: clamping every SamplerZ answer of E to within `30` of its centre costs `p(30)` per query
+  (`AbortTV.etvDist_implT_le`). Clamped answers keep every checked exact value in range (route B′: merges are `√2`
+  times unitary, line 10 adds `ℓ̂⊙δ1`, deterministic part `≤ 512·3500`), so `sign164` and `sign164G ρ (fun _ _ _ =>
+  True)` are equal on clamped runs.
+- F side: an answer of F is kept when it lies within `29.9` of the computed centre `t̄` and `(t̄ − t)² ≤ 2⁻⁸`, and is
+  otherwise replaced by the rounded exact centre (`clampF`). Along every execution of `oa` the sum of `(t̄ − t)²` is
+  `≤ 2⁻⁹` (`Uses64.pathS`), so no query with `(t̄ − t)² > 2⁻⁸` occurs, and the clamped answers lie within `30` of the
+  exact centres.
+- Hypotheses beyond those of `falcon512_model64(n)`: every stored tree is real (`FTree.Real`, carried by `Swap`);
+  for `falcon512_exact64(n)'`, every auxiliary answer type is inhabited.
 
 `test/Axioms.lean` and `test/S7Axioms.lean` check with `#guard_msgs` that each theorem above
 (`discreteGaussianSum_eq_fourier` through `discreteGaussianSum_mem`, which rewrites with it) depends only on
@@ -138,8 +186,8 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   in addition to the leaf and center bounds. The paper makes the same assumption implicitly.
 - The error bounds on leaves and centers (or their sums along executions) are hypotheses of `theorem1`, `theorem2`,
   `falcon512`, `falcon1024`, `falcon512_rmse` and `falcon512_proved`, as in the paper; proving them for a fixed-point
-  implementation is the paper's stated open problem. S7 proves the call count and the center sum for its signing model
-  only, within the limits below.
+  implementation is the paper's stated open problem. S7 and S8 prove the call count and the center sum for their signing
+  models only, within the limits below.
 - `oa` is a finite term: signing restarts are capped, and the hypotheses range over every history, so out-of-range
   samples must abort or clamp identically in the three worlds. Relating this experiment to uncapped Falcon is not
   formalised (the paper's `c` and "for any history" leave the same gap).
@@ -148,9 +196,10 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
 
 ### S7
 
-- Abort gap: `Pr_E[abort]` is not bounded. For exact stored-tree signing X without aborts, `Pr_X[s] ≥ Pr_E[s] −
-  Pr_E[abort]` (a coupling argument, not formalised); Lemma 12 at `λ = 128` gives only about `K·2⁻¹²⁸` for
-  `Pr_E[abort]` over `K ≤ 2³⁸` calls, so against abort-free exact signing the 128-bit statement does not follow.
+- Abort gap at tag 21: `Pr_E[abort]` is not bounded at the `2²¹` range of S7. For exact stored-tree signing X without
+  aborts, `Pr_X[s] ≥ Pr_E[s] − Pr_E[abort]` (a coupling argument, not formalised for S7); the tree-only bound of S8
+  (route B′) is vacuous at `2²¹`, so against abort-free exact signing the 128-bit statement does not follow for the S7
+  model. S8 bounds it for the Type 1 model at `R64 = 2²⁴`.
 - Hop B (stored tree to true tree: center shift `(t1 − z1)(ℓ̂ − ℓ)`, leaves `σ̄ → σ`) is not proved, so S7 states
   nothing relative to exact Falcon.
 - Keys are those of the paper's modified NTRUGen (Alg. 2), not Falcon round 3 or FIPS 206 draft keys; `Key`'s
@@ -173,11 +222,32 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   including the paper's Type 2 Python implementation, is shown to meet F's conditions. It is not the paper's 64.64
   Type 1 C implementation (§6) and not the FIPS 206 draft signer, which signs in binary64 floating point.
   NIST has announced plans to specify FN-DSA signing in 64.64 fixed point (pqc-forum, 28 September 2026, as cited
-  in ePrint 2026/2431); this release does not model that chain.
+  in ePrint 2026/2431); S7 does not model that chain (S8 models one Type 1 chain, below).
 - Falcon-1024 is not covered by S7.
 
-Open: the 64.64 fixed-point chain; a bound on `Pr_E[abort]` (Lemma 12 at `λ` above 128 within the `2²¹ − 2`
-range); hop B.
+### S8
+
+- The model is the non-split scale-first Type 1 chain of ePrint 2026/2431 §3.1, which §5 suggests pinning; it is not a
+  chain specified by NIST. The multiply-first order `−(ĉ⊙F̂)/q` of the reference code, c-fn-dsa and the 64.64 C
+  prototype fixed-point-c ([DAB26] in 2026/2431) and the split (`t_frac`) path are not modelled.
+- No implementation (2026/2431's fxp32.64 signer, fixed-point-c [DAB26]) is shown to meet `sign164`'s operation
+  sequence. The model computes every FFT slot; 2026/2431 works over the `n/2` slots with the conjugates implied, which
+  agrees with the model only under conjugation-symmetric rounding, and its recommended ties-up rounding is not.
+  c-fn-dsa signs in binary64 and is not a Type 1 arithmetic.
+- The range checks of F are the model's; deployed signers run none. `falcon512_exact64(n)'` covers fixed-point
+  signing without them (F′) under the same model.
+- `FTree.Real` (every stored `ℓ̂` the FFT of a real polynomial) is a hypothesis: it holds by construction with
+  half-spectrum storage or sign-symmetric rounding; full-spectrum storage rounded ties-up can violate it at ties.
+  The `ℓ̂` bounds of `FTree` remain checks added by the model.
+- Hop B, keys (modified NTRUGen, `Key`'s bounds up to keygen's rounding), the perfect sampler, the stored tree (its
+  computation is not modelled and nothing ties it to the key), recovering `z` from the computed FFT form (not
+  modelled), the norm check and restarts (integer code on `z` in `oa`), the absence of a UF-CMA game and of overflow
+  modelling are as in S7. In 32.64 the checked values fit the integer bits on paper; the unchecked even merge inputs,
+  merge sums and the line-10 operand are not covered.
+- `falcon512_exact64(n)'` (through `etvDist_F_F'`) assume every auxiliary answer type is inhabited (`Nonempty`).
+- Falcon-512 only.
+
+Open: hop B; the multiply-first order; the split path; Falcon-1024.
 
 ## Building
 
@@ -186,7 +256,7 @@ Requires [elan](https://github.com/leanprover/elan). The toolchain and the VCVio
 
 ```sh
 lake exe cache get   # optional: download Mathlib's build cache
-lake build           # every module, including S7 (FalconPrecision/Errors, by glob)
+lake build           # every module, including S7 and S8 (FalconPrecision/Errors, by glob)
 lake build Axioms    # guarded #print axioms (test/Axioms.lean, test/S7Axioms.lean) and the end-to-end example
 ```
 
@@ -197,6 +267,11 @@ Both commands have been run on x86_64 and aarch64; every guarded `#print axioms`
 
 Developed with Claude Code (Anthropic) under the direction of XC0R. Every theorem named above is checked by the
 Lean kernel; `lake build` and `lake build Axioms` re-check them without trusting how they were produced.
+
+Changes since 0.2.0 (statements of 0.2.0 unchanged): `Errors.FFSamp.Uses` is a `def` over `UsesG`, so its
+constructors are `UsesG.pure`, `UsesG.query`, `UsesG.sign`; `ffs`, `splitC`, `mergeC`, `updC` and `join` are
+abbreviations of `ffsU` (through `ffsG`), `splitCU`, `mergeCU`, `updCU` and `joinU`, so their equation lemmas
+differ; `InB` and `InC` are defined through `InBR` and `InCR`.
 
 ## License
 

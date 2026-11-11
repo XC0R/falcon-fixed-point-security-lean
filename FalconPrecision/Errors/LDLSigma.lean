@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.LDLTree
 public import FalconPrecision.Errors.LDLLeaf
 
-/-! # Leaf error `Δσ` of ffLDL⋆ (TASK-009 S7d)
+/-! # Leaf error `Δσ` of ffLDL⋆
 
 Composition: root diagonal values with relative error `ρ₀`, `L` inner levels with local error `ε`
 (`tree_rel`), then the normalisation `σ_i = σ/√D̂` computed with relative error `ρs` (`sqrt_ratio`).

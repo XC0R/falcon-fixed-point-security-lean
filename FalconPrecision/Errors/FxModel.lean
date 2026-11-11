@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FxC
 public import FalconPrecision.Errors.FalconW
 
-/-! # Fixed-point model: per-operation arithmetic, twiddle tables, FFT, merge layer (TASK-009 S7g)
+/-! # Fixed-point model: per-operation arithmetic, twiddle tables, FFT, merge layer
 
 A register at tag `m` holds a real on the grid `u·ℤ`, `u = 2^(m-p)`, `p = 63` (ePrint 2026/1531
 §7.1). `Arith` is the arithmetic of an implementation: one deterministic function per operation,

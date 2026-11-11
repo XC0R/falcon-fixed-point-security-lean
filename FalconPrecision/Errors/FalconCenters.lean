@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFSampRun
 
-/-! # Falcon-512 center-error instance (TASK-009 S7e)
+/-! # Falcon-512 center-error instance
 
 `run_l2` at Falcon-512 (`n = 512`, ffSampling of size `2^9`) with the Type 2 budgets of ePrint
 2026/1531 Table 4 (centers and `ẑ` at tag 21, `p = 63`): split twiddle `ζ̄/2` within `δ ≤ √2/2·2⁻⁶³`

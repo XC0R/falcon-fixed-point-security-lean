@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FFTLayer
 public import Mathlib.Algebra.BigOperators.Fin
 
-/-! # The split identity behind Falcon's FFT (TASK-009 S7c)
+/-! # The split identity behind Falcon's FFT
 
 Falcon evaluates `f ∈ ℂ[x]/(xⁿ + 1)` at the roots of `xⁿ + 1` by splitting `f(x) = f₀(x²) +
 x·f₁(x²)`: the roots come in pairs `±ζ` whose squares are the roots of `x^{n/2} + 1`, so `f(±ζ) =

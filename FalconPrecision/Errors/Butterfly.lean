@@ -7,7 +7,7 @@ module
 
 public import Mathlib.Analysis.Complex.Basic
 
-/-! # One FFT butterfly in fixed point (TASK-009 S7c)
+/-! # One FFT butterfly in fixed point
 
 Falcon's FFT merges `f̂(ζ) = â + ζ·b̂`, `f̂(-ζ) = â - ζ·b̂` (ePrint 2026/1531 §7.3 item 1). With
 inputs within `E` of `a, b`, a fixed-point twiddle `ζ̂` within `δ` of `ζ` (`|ζ| = 1`), and the

@@ -6,6 +6,11 @@ import FalconPrecision.Errors.IFFTRec
 import FalconPrecision.Errors.FxC
 import FalconPrecision.Errors.PathCompose
 import FalconPrecision.Errors.SignModel
+import FalconPrecision.Errors.SignModel64
+import FalconPrecision.Errors.GaussTail
+import FalconPrecision.Errors.AbortTV
+import FalconPrecision.Errors.FFTReal
+import FalconPrecision.Errors.AbortExact
 
 /-- info: 'FalconPrecision.Falcon.falcon512_proved' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
@@ -218,3 +223,299 @@ import FalconPrecision.Errors.SignModel
 /-- info: 'FalconPrecision.Errors.Fixed.Rnd.arith' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms FalconPrecision.Errors.Fixed.Rnd.arith
+
+/-- info: 'FalconPrecision.Errors.GaussTail.tsum_pmf_mul_exp' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.tsum_pmf_mul_exp
+
+/-- info: 'FalconPrecision.Errors.GaussTail.lintegral_exp_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.lintegral_exp_le
+
+/-- info: 'FalconPrecision.Errors.GaussTail.measure_ge_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.measure_ge_le
+
+/-- info: 'FalconPrecision.Errors.GaussTail.measure_le_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.measure_le_le
+
+/-- info: 'FalconPrecision.Errors.GaussTail.measure_abs_ge_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.measure_abs_ge_le
+
+/-- info: 'FalconPrecision.Errors.GaussTail.kappa_falcon' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.kappa_falcon
+
+/-- info: 'FalconPrecision.Errors.GaussTail.measure_abs_ge_falcon' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.GaussTail.measure_abs_ge_falcon
+
+/-- info: 'FalconPrecision.Errors.AbortTV.etvDist_map_self_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortTV.etvDist_map_self_le
+
+/-- info: 'FalconPrecision.Errors.AbortTV.etvDist_clamp_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortTV.etvDist_clamp_le
+
+/-- info: 'FalconPrecision.Errors.AbortTV.etvDist_simulateQ_le_path' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortTV.etvDist_simulateQ_le_path
+
+/-- info: 'FalconPrecision.Errors.AbortTV.etvDist_map_clamp_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortTV.etvDist_map_clamp_le
+
+/-- info: 'FalconPrecision.Errors.AbortTV.etvDist_implT_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortTV.etvDist_implT_le
+
+/-- info: 'FalconPrecision.Errors.FFTReal.pt_cj' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.pt_cj
+
+/-- info: 'FalconPrecision.Errors.FFTReal.isReal_evalAt' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.isReal_evalAt
+
+/-- info: 'FalconPrecision.Errors.FFTReal.im_eq_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.im_eq_zero
+
+/-- info: 'FalconPrecision.Errors.FFTReal.isReal_upd' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.isReal_upd
+
+/-- info: 'FalconPrecision.Errors.FFTReal.isReal_splitE' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.isReal_splitE
+
+/-- info: 'FalconPrecision.Errors.FFTReal.isReal_mergeE' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFTReal.isReal_mergeE
+
+/-- info: 'FalconPrecision.Falcon.falcon512_model64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_model64
+
+/-- info: 'FalconPrecision.Falcon.falcon512_model64n' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_model64n
+
+/-- info: 'FalconPrecision.Falcon.falcon512_proved_n64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_proved_n64
+
+/-- info: 'FalconPrecision.Falcon.centers_budget64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.centers_budget64
+
+/-- info: 'FalconPrecision.Falcon.centers_budget64n' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.centers_budget64n
+
+/-- info: 'FalconPrecision.Errors.FFSamp.input_err64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.input_err64
+
+/-- info: 'FalconPrecision.Errors.FFSamp.inp64_base' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.inp64_base
+
+/-- info: 'FalconPrecision.Errors.FFSamp.inp64_norm' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.inp64_norm
+
+/-- info: 'FalconPrecision.Errors.FFSamp.chC64_err' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.chC64_err
+
+/-- info: 'FalconPrecision.Errors.FFSamp.cqC64_err' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.cqC64_err
+
+/-- info: 'FalconPrecision.Errors.FFSamp.fft_cert64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.fft_cert64
+
+/-- info: 'FalconPrecision.Errors.FFSamp.sign164_pathS' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.sign164_pathS
+
+/-- info: 'FalconPrecision.Errors.FFSamp.sign164_pathN' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.sign164_pathN
+
+/-- info: 'FalconPrecision.Errors.FFSamp.Uses64.pathS' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.Uses64.pathS
+
+/-- info: 'FalconPrecision.Errors.FFSamp.Uses64.pathN' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.Uses64.pathN
+
+/-- info: 'FalconPrecision.Errors.FFSamp.UsesG.path' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.UsesG.path
+
+/-- info: 'FalconPrecision.Errors.FFSamp.UsesG.signLoopG' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.UsesG.signLoopG
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs64_pathS' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs64_pathS
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs64_pathN' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs64_pathN
+
+/-- info: 'FalconPrecision.Errors.FFSamp.coef64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.coef64
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ez64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ez64
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs_pathSU' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs_pathSU
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs_pathNU' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs_pathNU
+
+/-- info: 'FalconPrecision.Errors.FFSamp.node_stepU' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.node_stepU
+
+/-- info: 'FalconPrecision.Errors.Fixed.Rnd.arith64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.Fixed.Rnd.arith64
+
+/-- info: 'FalconPrecision.Errors.Fixed.Rnd.divq_err' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.Fixed.Rnd.divq_err
+
+/-- info: 'FalconPrecision.Errors.FFSamp.sign164_eq_margin' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.sign164_eq_margin
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs64_eq_margin' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs64_eq_margin
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffsU_eq_margin' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffsU_eq_margin
+
+/-- info: 'FalconPrecision.Errors.FFSamp.InBR.chkM' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.InBR.chkM
+
+/-- info: 'FalconPrecision.RenyiPath.PathSumP.bind_congr' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.PathSumP.bind_congr
+
+/-- info: 'FalconPrecision.Errors.FFSamp.ffs_pathNG' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.ffs_pathNG
+
+/-- info: 'FalconPrecision.Errors.FFSamp.budget64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.FFSamp.budget64
+
+/-- info: 'FalconPrecision.Errors.AbortExact.simulateQ_clampQ' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.simulateQ_clampQ
+
+/-- info: 'FalconPrecision.Errors.AbortExact.ffsG_clamp' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.ffsG_clamp
+
+/-- info: 'FalconPrecision.Errors.AbortExact.sign164G_clamp' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.sign164G_clamp
+
+/-- info: 'FalconPrecision.Errors.AbortExact.sign164_clamp' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.sign164_clamp
+
+/-- info: 'FalconPrecision.Errors.AbortExact.etvDist_E_X' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.etvDist_E_X
+
+/-- info: 'FalconPrecision.Errors.AbortExact.exp_thirty' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.exp_thirty
+
+/-- info: 'FalconPrecision.Errors.AbortExact.eps_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.eps_le
+
+/-- info: 'FalconPrecision.Errors.AbortExact.isReal_t0E' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.isReal_t0E
+
+/-- info: 'FalconPrecision.Errors.AbortExact.isReal_t1E' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.isReal_t1E
+
+/-- info: 'FalconPrecision.Falcon.falcon512_exact64n' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_exact64n
+
+/-- info: 'FalconPrecision.Falcon.falcon512_exact64' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_exact64
+
+/-- info: 'FalconPrecision.RenyiPath.PathSum.inv_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.PathSum.inv_query
+
+/-- info: 'FalconPrecision.RenyiPath.PathSum.add' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.PathSum.add
+
+/-- info: 'FalconPrecision.RenyiPath.PathSum.indicator' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.PathSum.indicator
+
+/-- info: 'FalconPrecision.RenyiPath.PathSum.simulateQ_map' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.PathSum.simulateQ_map
+
+/-- info: 'FalconPrecision.RenyiPath.etvDist_simulateQ_rewrite' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.RenyiPath.etvDist_simulateQ_rewrite
+
+/-- info: 'FalconPrecision.Errors.AbortExact.etvDist_map_clampF_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.etvDist_map_clampF_le
+
+/-- info: 'FalconPrecision.Errors.AbortExact.etvDist_F_F'' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.etvDist_F_F'
+
+/-- info: 'FalconPrecision.Errors.AbortExact.exp_299' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.exp_299
+
+/-- info: 'FalconPrecision.Errors.AbortExact.eps_leF' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.eps_leF
+
+/-- info: 'FalconPrecision.Errors.AbortExact.Swap.signLoopG' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Errors.AbortExact.Swap.signLoopG
+
+/-- info: 'FalconPrecision.Falcon.falcon512_exact64n'' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_exact64n'
+
+/-- info: 'FalconPrecision.Falcon.falcon512_exact64'' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms FalconPrecision.Falcon.falcon512_exact64'

@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFTL2
 
-/-! # ℓ2 center error of one ffSampling node (TASK-009 S7e)
+/-! # ℓ2 center error of one ffSampling node
 
 One node of ffSampling (ePrint 2026/1531 Alg. 8) at size `2^(L+1)`, errors in ℓ2 over all slots. Per
 slot the map `(δt0, δt1) ↦ (δt1, δt0 + ℓ̂·δt1)` has norm `N` whenever `(N² - 1)(N² - 1 - Λ²) ≥ Λ²`,

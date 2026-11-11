@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FxR
 public import FalconPrecision.Errors.FFTRec
 
-/-! # Complex fixed point and the FFT error instantiated (TASK-009 S7c)
+/-! # Complex fixed point and the FFT error instantiated
 
 `FxC` is a pair of `FxR` at a common tag (ePrint 2026/1531 §7.1). A twiddle rounded componentwise to
 tag `mζ` is within `δ = √2·ulp(mζ)/2` of the root; a complex product computed as four rounded real

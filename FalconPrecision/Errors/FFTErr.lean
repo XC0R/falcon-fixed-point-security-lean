@@ -8,7 +8,7 @@ module
 public import Mathlib.Algebra.BigOperators.Fin
 public import Mathlib.Tactic
 
-/-! # Error of an `L`-level fixed-point FFT (TASK-009 S7c)
+/-! # Error of an `L`-level fixed-point FFT
 
 Level `ℓ` merges with the layer bound of `FFTLayer.mergeH_err`: `E_{ℓ+1} ≤ (2 + δ)E_ℓ + δB_ℓ + r`,
 where `B_ℓ` bounds the half-size transforms and grows at most `×2` per level

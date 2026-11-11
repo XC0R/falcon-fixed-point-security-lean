@@ -8,7 +8,7 @@ module
 public import Mathlib.Analysis.Complex.Basic
 public import Mathlib.Tactic
 
-/-! # One inner level of ffLDL⋆ on the diagonal (TASK-009 S7d)
+/-! # One inner level of ffLDL⋆ on the diagonal
 
 At an inner level of ffLDL⋆ (ePrint 2026/1531 Alg. 5, lines 8-11) a diagonal value `D̂` is split by
 `splitfft`: for a pair of slots `x = D̂(ζ)`, `y = D̂(-ζ)` (real, self-adjoint) the child Gram matrix

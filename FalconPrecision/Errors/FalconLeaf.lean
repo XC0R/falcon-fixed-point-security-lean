@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.LDLSigma
 public import FalconPrecision.Errors.LDLFx
 
-/-! # Falcon-512 leaf-error instance (TASK-009 S7d)
+/-! # Falcon-512 leaf-error instance
 
 ffLDL⋆ at Falcon-512 (`q = 12289`, `γhybrid = 4`, keygen-enforced, Alg. 2 l. 8, §8.5: diagonal
 values in `[q/16, 16q]` by Lemma 8), 8 inner levels, Type 2 budgets at Table 4 tags (`D̂` at tag 18,

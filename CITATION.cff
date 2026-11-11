@@ -4,7 +4,7 @@ title: "FalconPrecision: kernel-checked security of fixed-point Falcon signing"
 authors:
   - alias: XC0R
 license: Apache-2.0
-version: 0.2.0
+version: 0.3.0
 date-released: "2026-11-10"
 repository-code: "https://github.com/XC0R/falcon-fixed-point-security-lean"
 references:
@@ -23,6 +23,19 @@ references:
     year: 2026
     notes: "Report 2026/1531"
     url: "https://eprint.iacr.org/2026/1531"
+  - type: article
+    title: "Flying, Not Floating: Precise Fixed-Point Falcon on Embedded Processors"
+    authors:
+      - family-names: Halmans
+        given-names: Stef
+      - family-names: Kumar
+        given-names: Amit
+      - family-names: Güneysu
+        given-names: Tim
+    journal: "IACR Cryptology ePrint Archive"
+    year: 2026
+    notes: "Report 2026/2431"
+    url: "https://eprint.iacr.org/2026/2431"
   - type: software
     title: VCVio
     authors:

@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.Butterfly
 public import Mathlib.Analysis.Normed.Group.Constructions
 
-/-! # One merge layer of Falcon's FFT in fixed point (TASK-009 S7c)
+/-! # One merge layer of Falcon's FFT in fixed point
 
 A layer merges two half-size transforms `u, v` with twiddles `ζ`: `w_j = (u_j + ζ_j v_j, u_j - ζ_j
 v_j)`. In the sup norm (`Fin k → ℂ × ℂ`) the exact layer satisfies `‖w‖ ≤ ‖u‖ + ‖v‖`, and a computed

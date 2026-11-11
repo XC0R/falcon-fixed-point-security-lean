@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.RenyiPath
 
-/-! # Composing path sums (TASK-009 S7f)
+/-! # Composing path sums
 
 `PathSum.bind`: path budgets add along `>>=`. `BlockPath K c oa`: `oa` runs at most `K` blocks in
 sequence, each with path sum at most `c`, with no other weighted queries between them; then `oa` has
@@ -55,6 +55,18 @@ theorem PathSumP.toPathSum {w : ι → ℝ} {α : Type} {P : α → Prop} {oa : 
   induction h with
   | pure x h0 _ => exact .pure x h0
   | query_bind t k _ ih => exact .query_bind t k ih
+
+/-- Continuations that agree on results satisfying `P` give the same `>>=`. -/
+theorem PathSumP.bind_congr {w : ι → ℝ} {α β : Type} {P : α → Prop} {oa : OracleComp spec α} {S : ℝ}
+    (h : PathSumP w P oa S) {f g : α → OracleComp spec β} (hfg : ∀ x, P x → f x = g x) :
+    oa >>= f = oa >>= g := by
+  induction h with
+  | pure x _ hx => rw [pure_bind, pure_bind, hfg x hx]
+  | query_bind t k _ ih =>
+    rw [bind_assoc, bind_assoc]
+    congr 1
+    funext u
+    exact ih u
 
 /-- **Path budgets add along `>>=`**, the continuation used only on results satisfying `P`. -/
 theorem PathSumP.bind {w : ι → ℝ} {α β : Type} {P : α → Prop} {Q : β → Prop}

@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Instances
 
-/-! # Theorem 2 at Falcon-512 with per-call budgets (TASK-009 S7f)
+/-! # Theorem 2 at Falcon-512 with per-call budgets
 
 `falcon512_proved` is Theorem 2 at `λ = 128` for SamplerZ calls `CallP` whose leaf error `|σ̄/σ - 1|
 ≤ 2⁻⁴²` (`CallP.hΔσ`) is assumed per call. The worlds answer a call by `D_{σ,t}` (E), `D_{σ̄,t}` (M)
@@ -32,7 +32,9 @@ model of fixed-point signing. `hS₂` ranges over every history of a full-suppor
 tag-21 range `|t̂|, |ẑ| < 2²¹` behind the per-call budget holds only with high probability (Lemma
 12): `oa` must clamp or abort out-of-range values as the same function of the history in all three
 worlds. `hN` (`2⁵¹` SamplerZ calls, i.e. `2⁴¹` ffSampling calls) is looser than the `2³⁸` ffSampling
-calls (`2⁴⁸` SamplerZ calls) that `centers_budget` fits; the latter is the effective bound. -/
+calls (`2⁴⁸` SamplerZ calls) that `centers_budget` fits; the latter is the effective bound.
+`falcon512_proved_n64` is the same statement for up to `2⁶⁴` SamplerZ calls (`hN`);
+`falcon512_proved` follows from it. -/
 
 @[expose] public section
 
@@ -113,6 +115,52 @@ theorem centers_budget : (2 : ℝ) ^ 38 * (49 * (365 / 100 / 2 ^ 32) + 135700 / 
 variable {ιA : Type} {aux : OracleSpec.{0, 0} ιA} [∀ t, Countable (aux t)]
   {m : Type → Type*} [Monad m] [LawfulMonad m] [EvalDistSemantics m] [LawfulEvalDistSemantics m]
 
+/-- **Theorem 2 at Falcon-512** (`λ = 128`) as `falcon512_proved`, for up to `2⁶⁴` SamplerZ calls
+(`hN`). -/
+theorem falcon512_proved_n64 (T : ℝ≥0∞) (hT : 1 ≤ T) (implA : QueryImpl aux m)
+    (implE implM implF : QueryImpl (FalconGame.spec aux CallP) m)
+    (hAE : ∀ x, implE (.inl x) = implA x) (hAM : ∀ x, implM (.inl x) = implA x)
+        (hAF : ∀ x, implF (.inl x) = implA x)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    (hM : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implM (.inr q)) =
+      discreteGaussianMeasure q.σbar q.t)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    {α : Type} [MeasurableSpace α] [Countable α] [MeasurableSingletonClass α]
+    (oa : OracleComp (FalconGame.spec aux CallP) α)
+    (hN : RenyiPath.PathSum (Sum.elim (fun _ => 0) fun _ => 1) oa (2 ^ 64))
+    (hS₂ : RenyiPath.PathSum (Sum.elim (fun _ => 0) fun q : CallP => (q.tbar - q.t) ^ 2) oa
+        (1 / 2 ^ 9))
+    {s : Set α} (hs : MeasurableSet s)
+        (hwin : T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) < 𝒟[simulateQ implF oa] s) :
+    T * (2 : ℝ≥0∞) ^ (-(128 : ℝ)) < 𝒟[simulateQ implE oa] s := by
+  have h :=
+      FalconGame.theorem2 128 (2 ^ 51)
+          (by norm_num) T hT CallP.σ CallP.σbar CallP.t CallP.tbar (3 / 10)
+    (1277 / 1000) ((1 / 2 ^ 40) ^ 2 * 2 ^ 64)
+        (1 / 2 ^ 9) implA implE implM implF hAE hAM hAF hE hM hF
+    (fun q => by linarith [q.hσ.1]) (by norm_num)
+    (fun q => by have := q.hleaf (2 * 128 - 1) (by norm_num) (by norm_num); push_cast; exact this)
+    le_rfl (fun q => q.hσbar_ge) oa
+    (hN.mono (sq_nonneg _) fun x => by
+      cases x with
+      | inl _ => simp
+      | inr q => simpa using sq_le_sq' (abs_le.1 q.hτ).1 (abs_le.1 q.hτ).2) hS₂
+    (by
+      refine le_trans ?_ (five_quarters_le _ (by positivity))
+      push_cast
+      refine (exp_le_one_add_two_mul _ (by positivity) (by norm_num)).trans ?_
+      norm_num)
+    (by
+      refine le_trans ?_ (five_quarters_le _ (by positivity))
+      push_cast
+      refine (exp_le_inv_one_sub _ (by norm_num)).trans ?_
+      norm_num)
+    hs (by convert hwin using 4; norm_num)
+  convert h using 4
+
+
 /-- **Theorem 2 at Falcon-512** (`λ = 128`) for calls with leaf error `≤ 2⁻⁴²`, under the
 execution-level hypotheses `hN` (call count) and `hS₂` (centre-error path sum), relative to the
 world E given by `CallP.σ`, `CallP.t` (exact signing with the stored tree under `CallP.stored`; hop
@@ -134,30 +182,8 @@ theorem falcon512_proved (T : ℝ≥0∞) (hT : 1 ≤ T) (implA : QueryImpl aux 
         (1 / 2 ^ 9))
     {s : Set α} (hs : MeasurableSet s)
         (hwin : T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) < 𝒟[simulateQ implF oa] s) :
-    T * (2 : ℝ≥0∞) ^ (-(128 : ℝ)) < 𝒟[simulateQ implE oa] s := by
-  have h :=
-      FalconGame.theorem2 128 (2 ^ 51)
-          (by norm_num) T hT CallP.σ CallP.σbar CallP.t CallP.tbar (3 / 10)
-    (1277 / 1000) ((1 / 2 ^ 40) ^ 2 * 2 ^ 51)
-        (1 / 2 ^ 9) implA implE implM implF hAE hAM hAF hE hM hF
-    (fun q => by linarith [q.hσ.1]) (by norm_num)
-    (fun q => by have := q.hleaf (2 * 128 - 1) (by norm_num) (by norm_num); push_cast; exact this)
-    le_rfl (fun q => q.hσbar_ge) oa
-    (hN.mono (sq_nonneg _) fun x => by
-      cases x with
-      | inl _ => simp
-      | inr q => simpa using sq_le_sq' (abs_le.1 q.hτ).1 (abs_le.1 q.hτ).2) hS₂
-    (by
-      refine le_trans ?_ (five_quarters_le _ (by positivity))
-      push_cast
-      refine (exp_le_one_add_two_mul _ (by positivity) (by norm_num)).trans ?_
-      norm_num)
-    (by
-      refine le_trans ?_ (five_quarters_le _ (by positivity))
-      push_cast
-      refine (exp_le_inv_one_sub _ (by norm_num)).trans ?_
-      norm_num)
-    hs (by convert hwin using 4; norm_num)
-  convert h using 4
+    T * (2 : ℝ≥0∞) ^ (-(128 : ℝ)) < 𝒟[simulateQ implE oa] s :=
+  falcon512_proved_n64 T hT implA implE implM implF hAE hAM hAF hE hM hF oa
+      (hN.weaken (by norm_num)) hS₂ hs hwin
 
 end FalconPrecision.Falcon

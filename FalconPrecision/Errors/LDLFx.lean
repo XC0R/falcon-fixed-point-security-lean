@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.LDLStep
 
-/-! # Fixed-point error of one inner ffLDL⋆ step (TASK-009 S7d)
+/-! # Fixed-point error of one inner ffLDL⋆ step
 
 From computed slot values `x̂, ŷ > 0`, the step computes `Ĝ00 ≈ a = (x̂ + ŷ)/2` (error `e₀`), `Ĝ10*
 ≈ b = ζ̄(x̂ - ŷ)/2` (error `e₁`, from the split), `L̂10 ≈ conj(b̂)/â` (error `eL`, fdiv) and `D̂11 ≈

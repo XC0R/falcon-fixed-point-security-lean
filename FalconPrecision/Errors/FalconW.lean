@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FalconCenters
 
-/-! # The line-10 budgets `W_L` of the Falcon-512 instance (TASK-009 S7e)
+/-! # The line-10 budgets `W_L` of the Falcon-512 instance
 
 Line 10 computes `t̂0' ≈ t̂0 + (t̂1 - ẑ1)·ℓ̂`. Its error splits as `δt0 + ℓ̂·δt1 + w` with `w =
 (rounding) - ℓ̂·δẑ1 + (t1 - z1)(ℓ̂ - ℓ)` (`update_decomp`), so `‖w‖₂ ≤ Λ·E_z + √(2^(L+1))(M·eℓ + r)`

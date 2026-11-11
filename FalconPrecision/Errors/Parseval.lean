@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFTL2
 
-/-! # Parseval for Falcon's recursive FFT (TASK-009 S7e)
+/-! # Parseval for Falcon's recursive FFT
 
 `Σ_o |f(pt L o)|² = 2^L·Σ_i |a_i|²` over the `2^L` points of the recursion (parallelogram law at
 each merge). -/

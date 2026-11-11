@@ -7,7 +7,7 @@ module
 
 public import Mathlib.Analysis.SpecialFunctions.Pow.Real
 
-/-! # Type 2 fixed-point arithmetic of ePrint 2026/1531 §7 with error bounds (TASK-009 S7a)
+/-! # Type 2 fixed-point arithmetic of ePrint 2026/1531 §7 with error bounds
 
 `FxR(x, m, p)` denotes `x·2^{m-p}` with `x ∈ ℤ`, `|x| < 2^p` (§7.1). Addition is exact at a common
 `m`; multiplication keeps the `p` most significant bits of `a.x·b.x` at tag `a.m + b.m`; retagging

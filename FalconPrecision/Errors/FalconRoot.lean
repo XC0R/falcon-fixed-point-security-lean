@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.LDLLeaf
 public import FalconPrecision.Errors.FFTCert
 
-/-! # Root relative error of ffLDL⋆ at Falcon-512 (TASK-009 S7d)
+/-! # Root relative error of ffLDL⋆ at Falcon-512
 
 `f̂, ĝ` by the certified FFT at tag 8 (`‖f̂‖∞ ≤ γf,g = 255`, footnote 9, for keys passing the keygen
 check of Alg. 2 l. 7, §8.3; `δ ≤ 0.7072·2⁻⁶³` assumes the size-2 merge multiplies by `±i` exactly,

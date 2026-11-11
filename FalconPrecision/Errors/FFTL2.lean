@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FFTCert
 public import Mathlib.Analysis.Normed.Lp.PiLp
 
-/-! # ℓ2 error of Falcon's recursive FFT (TASK-009 S7c)
+/-! # ℓ2 error of Falcon's recursive FFT
 
 With `E₂(L)` the ℓ2 norm (over the `2^L` outputs) of the error of an `L`-level computed FFT, the
 butterfly gives `‖(eu + w, eu - w)‖² = 2(‖eu‖² + ‖w‖²)` (parallelogram law) and Minkowski bounds

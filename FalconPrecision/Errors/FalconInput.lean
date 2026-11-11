@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FalconW
 public import FalconPrecision.Errors.Parseval
 
-/-! # Input error of ffSampling at Falcon-512 (TASK-009 S7e)
+/-! # Input error of ffSampling at Falcon-512
 
 Standard signing (§7.3 item 4): `t̂0 = -FFT(c/q)·F̂`, `t̂1 = FFT(c/q)·f̂`, products rounded at tag
 21. With `ĉ = FFT(c/q)` (assumed: `c/q` is the round-to-nearest of the exact quotient at tag 0, `½

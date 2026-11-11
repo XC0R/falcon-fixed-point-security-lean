@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.LDLStep
 
-/-! # ffLDL⋆ root and leaf normalisation errors (TASK-009 S7d)
+/-! # ffLDL⋆ root and leaf normalisation errors
 
 Root (Alg. 4 line 1 with the symplectic `D̂11 = q²/Ĝ00`, §7.3 item 3): `Ĝ00 = |f̂|² + |ĝ|²` from FFT
 outputs within `E` has relative error `(2E√(2G) + 2E² + e)/G`; a reciprocal keeps a relative error

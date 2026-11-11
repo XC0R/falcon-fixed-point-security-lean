@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFTRec
 
-/-! # Error of Falcon's recursive inverse FFT in fixed point (TASK-009 S7c)
+/-! # Error of Falcon's recursive inverse FFT in fixed point
 
 Falcon's invFFT (`splitfft`, spec Alg. 1) recovers `f₀(ζ²) = (f(ζ) + f(-ζ))/2` and `f₁(ζ²) = ζ̄(f(ζ)
 - f(-ζ))/2` (`|ζ| = 1`), recurses on both halves and interleaves the coefficients. The split does

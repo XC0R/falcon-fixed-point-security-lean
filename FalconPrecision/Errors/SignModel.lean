@@ -9,7 +9,7 @@ public import FalconPrecision.Errors.FFSampModel
 public import FalconPrecision.Errors.FalconInput
 public import FalconPrecision.Errors.FalconRoot
 
-/-! # Fixed-point signing as an execution model; Theorem 2 without `hN`, `hS₂` (TASK-009 S7g)
+/-! # Fixed-point signing as an execution model; Theorem 2 without `hN`, `hS₂`
 
 Standard signing (spec Alg. 10 l. 3, 6; ePrint 2026/1531 §7.3 item 4): `t̂ = (-FFT(c/q)⊙F̂,
 FFT(c/q)⊙f̂)`. Exact: `FFT` is evaluation at the roots `pt 9`. Fixed point (arithmetic `ρ : Arith`,
@@ -19,7 +19,8 @@ Table 4), products at tag 21. `input_err`: the ℓ2 input error of ffSampling is
 composing `fft_rec_err_l2`, `ec_le`, `fft_rec_err_cert`, `parseval` and `prod_l2` (`input512`); it
 uses retags within `½` ulp, so truncating retags are not covered. `sign1` runs `ffs` on that input;
 `Uses ρ K oa`: along every execution `oa` calls `sign1` at most `K` times (restarts included, e.g.
-`signLoop`) and makes otherwise only auxiliary queries.
+`signLoop`) and makes otherwise only auxiliary queries (`Uses ρ = UsesG (sign1 ρ)`; `UsesG` takes
+any ffSampling call of signing).
 
 `falcon512_model` is `falcon512_proved` for every such `oa` with `K ≤ 2³⁸`: `hN` (`≤ 1024·K ≤ 2⁵¹`
 SamplerZ calls) and `hS₂` (`≤ K·(49·3.65·2⁻³² + 135700·2⁻⁴²)² ≤ 2⁻⁹`, `centers_budget`) are proved,
@@ -265,22 +266,34 @@ theorem sign1_pathN (ρ : Arith) (k : Key) (c : Fin (2 ^ 9) → ℤ) :
     norm_num
   · exact .pure _ (by norm_num)
 
-/-- `oa` calls `sign1` at most `K` times along every execution; every other query is auxiliary. -/
-inductive Uses (ρ : Arith) : ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop
-  | pure (K : ℕ) {α : Type} (x : α) : Uses ρ K (pure x)
+/--
+`oa` makes at most `K` calls to `sg` (one ffSampling call of signing) along every execution; every
+other query is auxiliary. -/
+inductive UsesG (sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))))
+        :
+    ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop
+  | pure (K : ℕ) {α : Type} (x : α) : UsesG sg K (pure x)
   | query (K : ℕ) {α : Type} (t : ιA)
       (k : (FalconGame.spec aux Falcon.CallP).Range (.inl t) →
           OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ u, Uses ρ K (k u)) :
-      Uses ρ K (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl t)) >>= k)
+      (h : ∀ u, UsesG sg K (k u)) :
+      UsesG sg K
+          (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl t)) >>= k)
   | sign (K : ℕ) {α : Type} (key : Key) (c : Fin (2 ^ 9) → ℤ)
       (k : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) →
           OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ y, Uses ρ K (k y)) : Uses ρ (K + 1) (sign1 ρ key c >>= k)
+      (h : ∀ y, UsesG sg K (k y)) : UsesG sg (K + 1) (sg key c >>= k)
 
-theorem Uses.mono {ρ : Arith} {K : ℕ} {α : Type}
-    {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Uses ρ K oa) {K' : ℕ} (hK : K ≤ K') : Uses ρ K' oa := by
+/-- `oa` calls `sign1` at most `K` times along every execution; every other query is auxiliary. -/
+def Uses (ρ : Arith) : ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop :=
+  UsesG (sign1 ρ)
+
+theorem UsesG.mono {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K : ℕ}
+    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa) {K' : ℕ}
+    (hK : K ≤ K') : UsesG sg K' oa := by
   induction h generalizing K' with
   | pure K x => exact .pure K' x
   | query K t k _ ih => exact .query K' t k fun u => ih u hK
@@ -289,17 +302,51 @@ theorem Uses.mono {ρ : Arith} {K : ℕ} {α : Type}
     exact .sign K'' key c k fun y => ih y (by omega)
 
 /-- Calls add along `>>=`. -/
-theorem Uses.bind {ρ : Arith} {K K' : ℕ} {α β : Type}
-    {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β} (h : Uses ρ K oa)
-        (hb : ∀ x, Uses ρ K' (ob x)) :
-    Uses ρ (K + K') (oa >>= ob) := by
+theorem UsesG.bind {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K K' : ℕ}
+    {α β : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β} (h : UsesG sg K oa)
+        (hb : ∀ x, UsesG sg K' (ob x)) :
+    UsesG sg (K + K') (oa >>= ob) := by
   induction h with
   | pure K x => rw [pure_bind]; exact (hb x).mono (by omega)
   | query K t k _ ih => rw [bind_assoc]; exact .query _ t _ fun u => ih u hb
   | sign K key c k _ ih =>
     rw [bind_assoc, show K + 1 + K' = K + K' + 1 by omega]
     exact .sign _ key c _ fun y => ih y hb
+
+/--
+**Path sums of an experiment**: per-call path sums `≤ S` of `sg` give `≤ K·S` for a weight `w` that
+is `0` on auxiliary queries. -/
+theorem UsesG.path {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K : ℕ}
+    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa)
+    (w : ιA ⊕ Falcon.CallP → ℝ) (hw : ∀ t, w (.inl t) = 0) (S : ℝ) (hS : 0 ≤ S)
+    (hs : ∀ key c, PathSum w (sg key c) S) : PathSum w oa (K * S) := by
+  induction h with
+  | pure K x => exact .pure x (mul_nonneg (Nat.cast_nonneg _) hS)
+  | query K t k _ ih =>
+    refine .query_bind _ k fun u => ?_
+    rw [hw t, sub_zero]
+    exact ih u
+  | sign K key c k _ ih =>
+    have := (hs key c).bind ih
+    rwa [show S + K * S = ((K + 1 : ℕ) : ℝ) * S by push_cast; ring] at this
+
+theorem Uses.mono {ρ : Arith} {K : ℕ} {α : Type}
+    {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : Uses ρ K oa) {K' : ℕ} (hK : K ≤ K') : Uses ρ K' oa :=
+  UsesG.mono h hK
+
+/-- Calls add along `>>=`. -/
+theorem Uses.bind {ρ : Arith} {K K' : ℕ} {α β : Type}
+    {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β} (h : Uses ρ K oa)
+        (hb : ∀ x, Uses ρ K' (ob x)) :
+    Uses ρ (K + K') (oa >>= ob) :=
+  UsesG.bind h hb
 
 /--
 Spec Alg. 10 l. 4-11 with at most `n` ffSampling calls: `acc` (norm check and compression of `z`,
@@ -313,40 +360,20 @@ noncomputable def signLoop {β : Type} (ρ : Arith) (k : Key) (c : Fin (2 ^ 9) �
 theorem Uses.signLoop {β : Type} (ρ : Arith) (k : Key) (c : Fin (2 ^ 9) → ℤ)
     (acc : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) → Option β) :
     ∀ n, Uses ρ n (signLoop (aux := aux) ρ k c acc n)
-  | 0 => .pure 0 none
-  | n + 1 => .sign n k c _ fun y => by
+  | 0 => UsesG.pure 0 none
+  | n + 1 => UsesG.sign n k c _ fun y => by
     rcases acc y with _ | b
-    exacts [Uses.signLoop ρ k c acc n, .pure n _]
+    exacts [Uses.signLoop ρ k c acc n, UsesG.pure n _]
 
 theorem Uses.pathS {ρ : Arith} {K : ℕ} {α : Type}
     {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Uses ρ K oa) : PathSum wS oa (K * (49 * (365 / 100 / 2 ^ 32) + 135700 / 2 ^ 42) ^ 2) := by
-  induction h with
-  | pure K x => exact .pure x (by positivity)
-  | query K t k _ ih =>
-    refine .query_bind _ k fun u => ?_
-    rw [show wS (Sum.inl t) = 0 from rfl, sub_zero]
-    exact ih u
-  | sign K key c k _ ih =>
-    have := (sign1_pathS ρ key c).bind ih
-    rwa [show (49 * (365 / 100 / 2 ^ 32) + 135700 / 2 ^ 42 : ℝ) ^ 2 + K *
-        (49 * (365 / 100 / 2 ^ 32) +
-      135700 / 2 ^ 42) ^ 2 = ((K + 1 : ℕ) : ℝ) *
-          (49 * (365 / 100 / 2 ^ 32) + 135700 / 2 ^ 42) ^ 2 by
-        push_cast; ring] at this
+    (h : Uses ρ K oa) : PathSum wS oa (K * (49 * (365 / 100 / 2 ^ 32) + 135700 / 2 ^ 42) ^ 2) :=
+  UsesG.path h wS (fun _ => rfl) _ (sq_nonneg _) (sign1_pathS ρ)
 
 theorem Uses.pathN {ρ : Arith} {K : ℕ} {α : Type}
     {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Uses ρ K oa) : PathSum w1 oa (K * 1024) := by
-  induction h with
-  | pure K x => exact .pure x (by positivity)
-  | query K t k _ ih =>
-    refine .query_bind _ k fun u => ?_
-    rw [show w1 (Sum.inl t) = 0 from rfl, sub_zero]
-    exact ih u
-  | sign K key c k _ ih =>
-    have := (sign1_pathN ρ key c).bind ih
-    rwa [show (1024 : ℝ) + K * 1024 = ((K + 1 : ℕ) : ℝ) * 1024 by push_cast; ring] at this
+    (h : Uses ρ K oa) : PathSum w1 oa (K * 1024) :=
+  UsesG.path h w1 (fun _ => rfl) _ (by norm_num) (sign1_pathN ρ)
 
 end FalconPrecision.Errors.FFSamp
 

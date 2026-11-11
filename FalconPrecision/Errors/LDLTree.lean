@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.LDLStep
 
-/-! # Relative error of the ffLDL⋆ diagonal down the tree (TASK-009 S7d)
+/-! # Relative error of the ffLDL⋆ diagonal down the tree
 
 Level `ℓ + 1` diagonal values of ffLDL⋆ are arithmetic or harmonic means of pairs of level-`ℓ`
 values (`LDLStep`). If the root values lie in `[lo, hi]` with relative error `ρ₀`, and each computed

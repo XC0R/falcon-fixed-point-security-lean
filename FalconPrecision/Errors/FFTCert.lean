@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFTRec
 
-/-! # Certified-mode FFT error (TASK-009 S7c)
+/-! # Certified-mode FFT error
 
 ePrint 2026/1531 §7.3 item 1 and footnote 9: the intermediate values of `FFT(f)` are those of
 `invFFT(f̂)`, which does not increase the sup norm, so `‖f̂‖∞ ≤ B` bounds every intermediate

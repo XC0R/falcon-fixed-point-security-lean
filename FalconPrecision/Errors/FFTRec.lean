@@ -8,7 +8,7 @@ module
 public import FalconPrecision.Errors.FFTDef
 public import FalconPrecision.Errors.FFTErr
 
-/-! # Error of Falcon's recursive FFT in fixed point (TASK-009 S7c)
+/-! # Error of Falcon's recursive FFT in fixed point
 
 Falcon's FFT (`splitfft`/`mergefft`) evaluates `f` with `2^L` coefficients at `2^L` points: level `L
 + 1` pairs the points `±ζ` with `ζ² ` a level-`L` point, and `f(±ζ) = f₀(ζ²) ± ζ·f₁(ζ²)`. Any

@@ -7,7 +7,7 @@ module
 
 public import FalconPrecision.Errors.FFSampL2
 
-/-! # Center errors of a whole ffSampling run (TASK-009 S7e)
+/-! # Center errors of a whole ffSampling run
 
 `ETree L` records, for an ffSampling call of size `2^L` (Alg. 8), the errors of the inputs `(δt0,
 δt1)` at every node; the leaves (`k = 1`) hold the errors of the centers passed to SamplerZ. `Hyp`
