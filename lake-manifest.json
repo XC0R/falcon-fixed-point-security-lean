@@ -3,7 +3,7 @@
  "packagesDir": ".lake/packages",
  "packages": [
   {
-   "url": "https://github.com/Verified-zkEVM/VCV-io",
+   "url": "https://github.com/Verified-zkEVM/VCVio",
    "type": "git",
    "subDir": null,
    "scope": "",

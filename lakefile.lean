@@ -12,7 +12,7 @@ package FalconPrecision where
     ⟨`weak.linter.style.longFile, .ofNat 1500⟩
   ]
 
-require VCVio from git "https://github.com/Verified-zkEVM/VCV-io" @ "e7770ef7e042e91fecf94504fcf1d448f372109e"
+require VCVio from git "https://github.com/Verified-zkEVM/VCVio" @ "e7770ef7e042e91fecf94504fcf1d448f372109e"
 
 @[default_target]
 lean_lib FalconPrecision where

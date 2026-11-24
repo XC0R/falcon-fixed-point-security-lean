@@ -40,7 +40,7 @@ references:
     title: VCVio
     authors:
       - name: "VCVio contributors"
-    url: "https://github.com/Verified-zkEVM/VCV-io"
+    url: "https://github.com/Verified-zkEVM/VCVio"
     commit: e7770ef7e042e91fecf94504fcf1d448f372109e
   - type: software
     title: Mathlib

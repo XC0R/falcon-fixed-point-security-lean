@@ -49,7 +49,7 @@ Scope: the theorems are proved for leaf standard deviations in `[1.277, 2]` (bot
 relative error `|σ̄ᵢ/σᵢ − 1|`). Lemma 4 holds for every `σ` with `T(σ) < 1`; the constant of Lemma 5 is made
 explicit on the Falcon leaf range.
 
-The development is a library on top of [VCVio](https://github.com/Verified-zkEVM/VCV-io) (oracle computations,
+The development is a library on top of [VCVio](https://github.com/Verified-zkEVM/VCVio) (oracle computations,
 measure semantics, Rényi divergence, discrete Gaussians) and [Mathlib](https://github.com/leanprover-community/mathlib4).
 
 ## Main results
