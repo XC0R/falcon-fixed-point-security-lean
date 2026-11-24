@@ -1,0 +1,1 @@
+entry 70 delta45q: refVecB some; magOkB sf32 true sf64 true mf32 false mf64 true; checkFast xn0 true xn32 true

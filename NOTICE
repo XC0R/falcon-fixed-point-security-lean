@@ -1,0 +1,67 @@
+FalconPrecision
+
+This repository is licensed under the Apache License 2.0 (LICENSE). It contains values from third-party data,
+described below.
+
+Falcon round-3 known-answer-test values
+=======================================
+
+Source: the file `falcon512-KAT.rsp` of the Falcon round-3 submission package (specification v1.2), by the Falcon
+Project, as posted by NIST and on falcon-sign.info:
+
+  https://csrc.nist.gov/CSRC/media/Projects/post-quantum-cryptography/documents/round-3/submissions/Falcon-Round3.zip
+  https://falcon-sign.info/falcon-round3.zip
+
+`falcon512-KAT.rsp` (1250115 bytes, 100 entries) has sha256
+dd75c946fdedef4ec46a2bee7e10c65c9126f1a839b9ced6921fd45f7354b5cd in both archives. The file itself is not in this
+repository; evidence/README.md says where to download it.
+
+Files of this repository that contain values from it:
+
+- FalconPrecision/Exec/WitnessData.lean: `sk` of entries 0 and 70, as hexadecimal strings copied from the file, and
+  values computed from entries 0 and 70.
+- test/ExecRound3.lean: `sk` and `pk` of entry 0, as hexadecimal strings copied from the file.
+- test/ExecCodec.lean: `msg` and `sm` of entry 0, and the salt and message bytes of `sm` of entry 70, as
+  hexadecimal strings copied from the file, and a value computed from entry 0.
+- evidence/vectors/d45/e0.json, evidence/vectors/d45/e70.json, evidence/vectors/d45/e27.json,
+  evidence/vectors/d127/e0.json, evidence/vectors/d127/e70.json: the polynomials f, g, F, G decoded from `sk` and
+  s2 decoded from `sm` of entries 0, 70 and 27, and values computed from these entries.
+
+The run files that scripts/gen_evidence_runs.py writes to `runs/` contain values of all 100 entries; they are
+written from the reader's own copy of the file and are not part of this repository.
+
+Falcon specification test vectors
+=================================
+
+test/ExecSampler.lean contains the 16 SamplerZ test vectors of Table 3.2 (p. 44) of the Falcon specification v1.2
+(round 3), part of the same submission package, copied from the specification.
+
+Terms
+=====
+
+The values of both sections above are the submitters' (the Falcon Project's). They are reproduced here for
+public review and evaluation of the scheme, the purpose named in NIST's Call for Proposals for post-quantum
+cryptography (December 2016), §2.D.3. The Falcon reference implementation in the same submission package is
+distributed under the MIT license; its copyright and permission notice follows. No endorsement of this
+repository by NIST or by the Falcon Project is claimed or implied.
+
+  Copyright (c) 2017-2019  Falcon Project
+
+  Permission is hereby granted, free of charge, to any person obtaining
+  a copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be
+  included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -1,0 +1,1 @@
+entry 0 delta127q: refVecB some; magOkB sf32 true sf64 true mf32 true mf64 true; checkFast xn0 false xn32 true

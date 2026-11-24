@@ -20,4 +20,6 @@ lean_lib FalconPrecision where
 
 lean_lib Axioms where
   srcDir := "test"
-  roots := #[`Axioms, `EndToEnd, `S7Axioms]
+  roots := #[`Axioms, `EndToEnd, `S7Axioms, `ExecFixedPoint, `ExecFixedPointAxioms, `ExecKeyCheck,
+    `ExecSign, `ExecCheckFast, `ExecRound3, `ExecInstance45, `ExecSampler, `ExecEquiv,
+    `ExecCodec, `ExecRefVec]

@@ -31,8 +31,17 @@ an explicit `2⁻¹⁴⁰` per side. See [S8 results](#s8-results-falcon-512) an
 Release 0.4.0 (hop B) adds, for Falcon-512, the step from the stored tree to the true tree: abort-free exact signing
 on the stored tree (X) is related to exact Falcon signing (Y), ffSampling on the exact ffLDL⋆ tree of the basis
 `B = [[g, −f], [G, −F]]`, and, composed with S8, check-free fixed-point signing (F′) is related to Y. The relation
-between the two trees is a hypothesis on every key (`Close δ`); no model of key expansion is formalised. See
+between the two trees is a hypothesis on every key (`Close δ`); hop B formalises no model of key expansion (the
+executable track below adds one, with a per-key check that implies `Close δ`). See
 [Hop B results](#hop-b-results-falcon-512) and [Hop B](#hop-b) under Assumptions and limits.
+
+Release 0.5.0 (executable track) adds, for Falcon-512, executable Lean definitions of fixed-point arithmetic at 64
+fraction bits, key expansion with a per-key check, the signer, SamplerZ, encodings, HashToPoint and verification, each
+parametric in the unpinned choices of the FN-DSA design space that it models, theorems relating them to the S8 model
+and hop B, to the Falcon round-3 specification and to each other, and certified interval reference vectors for
+signing attempts. Facts about concrete keys, KAT entries and inputs are computed by `#eval` and enter the theorems as
+`Bool` premises; the code, scripts and recorded outputs to re-run them are in [evidence/](evidence/README.md) and
+`scripts/`. See [Executable track](#executable-track-falcon-512) and [LIMITS.md](LIMITS.md).
 
 Scope: the theorems are proved for leaf standard deviations in `[1.277, 2]` (both Falcon parameter sets have
 `σmin ≥ 1.2778`, `σmax = 1.8205`), with explicit conditions in place of the paper's smoothing-parameter hypotheses
@@ -212,7 +221,179 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   form reaches about `4.2·aΔσ²` near `σmin`, above the paper's `3aΔσ²`.
 - The smoothing parameter `ηϵ(Z)` is not used; the theta tails are bounded explicitly.
 
+## Executable track (Falcon-512)
+
+Names are relative to `FalconPrecision`; the modules are `FalconPrecision/Exec/*.lean`, the tests `test/Exec*.lean`.
+`Exec.Choices` lists the unpinned points that affect signing: key expansion (`x : XChoices`: the rounding `rm` of
+every operation (`floor`, `halfEven`, `halfUp`, `halfAway`), the rounding `rc` of stored constants, `y/x` or `1/x·y`
+(`dm`), the root by direct expansion or the NTRU identity (`root`); `xn` extra key-expansion fraction bits), the
+target order (scale-first `((−ĉ/q)⊙F̂, (ĉ/q)⊙f̂)` or multiply-first, ePrint 2026/2431 §3.1), the stored `1/q` (77 or
+64 fraction bits), the integer budget (`word`: unbounded `Int`, or every operation result reduced to an
+`(i + 64)`-bit two's-complement word; 32.64 and 64.64 at `i = 32`, `64`), S8's range checks (`rchk`), salt per
+attempt or reused, the restart cap, the norm bounds and the SamplerZ choices. `Exec.signX C samp T k c` is one
+signing attempt (ffSampling on the stored tree `T` with SamplerZ `samp`, `⊥` unless `|c i| < q`); `Exec.signMsgX`
+is the signer (restart loop, salt, norm check), which outputs `s` (Compress is not modelled).
+
+The track does not model binary64 (floating-point) signers, operation orders other than those of `Choices`, the PRNG
+or Falcon-1024, and it is not a FIPS 206 implementation (FIPS 206 is unpublished as of 2026-11-10; the FN-DSA
+encoding instance is provisional). Facts about concrete keys, KAT entries and inputs are computed by `#eval` (compiled
+code run by Lean's interpreter) and are not checked by the kernel; the theorems take them as `Bool` premises
+(`check … = true`, `entryOkB e = true`, `wit*B = true`, `refVecB … = some V`). [LIMITS.md](LIMITS.md) lists what
+each part does not prove and every `#eval` fact, with the command that re-runs it and its recorded output.
+
+### Arithmetic and key expansion
+
+`Exec.Fx f` is an integer `m` read as `m·2⁻ᶠ`, with no word size; fixed point at 64 fraction bits is `Fx 64`.
+`e r = 1` for `floor`, `1/2` otherwise. `Exec.check P n δq k` runs key expansion in balls at `64 + n` fraction bits
+on the raw key `k`, rounds every stored value once to 64 fraction bits (the centres are the stored tree `storeC`) and
+decides: `‖FFT(f)‖∞ ≤ 255`, `‖FFT(F)‖∞ ≤ 3500`, the leaf and `ℓ̂` bounds of `FTree`, every stored `ℓ̂`
+conjugate-symmetric, every stored factor ball of radius `≤ δq L`, every leaf ball inside `[1.2778, 1.825]` with
+relative radius `≤ 2⁻⁴²`, and `fG − gF = q` in `ℤ[x]/(x⁵¹² + 1)`.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.RMode.rnd_err`, `Exec.Fx.mul_err`, `half_err`, `div_err`, `sqrt_err` | 2026/1531 §3.4 | `\|rnd r y − y\| ≤ e r`; the product, halving, quotient (divisor `≠ 0`) and square root, each rounded once, are within `e r/2ᶠ` of the exact value |
+| `Exec.Fx.InRange.wrap` | 2026/1531 §3.4 | a value in `[−2^i, 2^i)` is unchanged by reduction to an `(i + 1 + f)`-bit two's-complement word |
+| `Exec.RMode.arith64`, `arith64_mul`, `arith64_halve`, `arith64_divq` | — | for `r ≠ floor`, an `Arith64 (1/2⁷⁸)` (S8's Type 1 arithmetic, `1/q` at 77 fraction bits) whose product, halving and `·1/q` are the executable operations on values at 64 fraction bits |
+| `Exec.check_sound` | — | `check P n δq k = true` ⇒ the key `toKeyB` built from `k`, with stored tree `storeC`, passes `KeyB.Good δ` (`δ L = δq L`): the stored tree is real and `Close δ` to the true tree `KeyB.trueTree` |
+| `Exec.checkFast_eq` | — | `checkFast P n δq k = check P n δq k` (the array version used for the runs) |
+| `Exec.falcon512_fixed_vs_true_checked` | — | `Errors.HopB.falcon512_fixed_vs_true` with `KeyB.Good δ` replaced by `check P n δq k = true` on every raw signing key (and its other hypotheses: `K ≤ 2³⁹` signing-oracle calls along every execution, `K·s2B 30.5 δ ≤ 2⁻⁹`, SamplerZ perfect in every world, auxiliary queries answered identically, `T ≥ 1`, `s` measurable): `T·2⁻¹²⁶ + 2⁻¹⁴⁰ < Pr_F′[s] ⇒ T·2⁻¹³¹ < Pr_Y[s] + 2⁻¹⁴¹` |
+| `Exec.s2B_falcon45`, `Exec.falcon512_fixed_vs_true45_checked` | — | `2³⁹·s2B 30.5 δ45 ≤ 2⁻⁹` for `δ45 = 2⁻⁴⁵` at every level; the checked theorem at `δ45q` with that condition proved |
+| `Exec.falcon512_fixed_vs_true127_checked` | — | the checked theorem at `δ127q` (`2⁻⁵⁸` at the root, `2⁻⁶³` below) |
+
+By `#eval`, with `rm = rc` ties to even or ties up, `dm = direct`, `root = plain`: `checkFast` at `δ45q` with
+`xn = 0` (fixed point at 64 fraction bits) is `true` for 92 of the 100 round-3 Falcon-512 KAT keys, the other 8
+failing only `‖FFT(f)‖∞ ≤ 255`; at `δ127q` it is `true` for none at `xn = 0` and `xn = 16`, and for the same 92 at
+`xn = 32`.
+
+### Signer
+
+`Exec.Adm C`: `rm ≠ floor`, `twOk rc` (the computed twiddle tables within `0.7072·2⁻⁶⁴`, decided), the scale-first
+target, unbounded words, and range checks, if any, at `R ≥ 1`; every other field is free. `Exec.checkRange C i W k`
+is a computable bound on every operation result of the attempt on `k` at budget `i`, for sampler answers within `W`
+of `⌊t̄⌋`.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.signX_refines` | — | `Adm C`, `check C.x C.xn δq k = true`, a lawful monad, a world `impl` whose SamplerZ answer on `(σ̄, t̄)` is `samp σ̄ t̄`, every `c`: `simulateQ impl (sign164G (arithX C h) (chkOf C.rchk) (toKeyB … k hk).toKey c) = signX C samp (storeC C.x C.xn k) k c` |
+| `Exec.falcon512_exec_vs_true` | — | `falcon512_fixed_vs_true_checked` with F′ replaced by the executable signer's world (`execImpl`), for `Adm C`, `C.rchk = none`, `1/q` at 77 fraction bits, and a sampler `samp` agreeing on grid values with a world distributed as `D_{σ̄,t̄}`; same hypotheses and thresholds |
+| `Exec.signX_word` | 2026/1531 §3.4 | `1 ≤ i ≤ 64`, `check`, `checkRange C i W k = true`, sampler answers clamped to `⌊t̄⌋ ± W`, a lawful monad: the attempt on `(i + 64)`-bit words equals the attempt on unbounded `Int` |
+| `Exec.sign32_eq_sign64` | — | `check`, `checkRange C i W k` at `i = 32` and `i = 64`, a lawful monad, sampler answers clamped to `⌊t̄⌋ ± W`: the 32.64 and 64.64 attempts are bit-identical |
+| `Exec.leafX_im` | — | `i ≤ 64`, `check`, `checkRange C i W k`, `\|c j\| < q`, sampler answers within `W` of `⌊t̄⌋`: every leaf centre of the unbounded attempt has `\|Im t̄\| ≤ imE i` (`2^(i−1)·2⁻³²` for `i ≥ 1`, `2⁻³²` at `i = 0`) |
+| `Exec.pathSum_signLoopX` | spec Alg. 10 l. 4-11 | a restart loop with cap `N` on a checked key, whose salt and hash make no signing-oracle call, makes at most `N` signing-oracle calls along every execution |
+
+By `#eval`: `twOk` is `true` for `halfEven`, `halfUp` and `halfAway` and `false` for `floor`; KAT entry 0 passes
+`checkFast` at `δ45q` and `checkRange` at `i = 32` and `i = 64` with `W = 19` (ties to even, `xn = 0`, scale-first).
+
+### SamplerZ
+
+`Exec.samplerZ P S ub σ̄ t̄` is SamplerZ (spec Alg. 12-15) on uniform bits `ub`. `S.base` selects the 72-bit table of
+spec Table 3.1 or a 79-bit table `tab79` built by the rule that reproduces Table 3.1 (NIST's 79-bit table is
+unpublished); `S.shiftRej` rejects a candidate whose shift is `≥ 64` (ePrint 2026/2902 Alg. 9) or saturates the shift
+at 63 (spec). `x`, `ccs` and `r` are exact in `ℚ`; the loop stops after 128 rejections with output `⌊t̄⌋`.
+`falcon512S` has `σmin = 1.277833697`, `σmax = 1.8205`.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.samplerZ_law` | spec Alg. 12-15 | for a table passing `okB` and uniform bits (`UnifBits ub`), the output law of `samplerZ P S ub σ̄ t̄` is the computable `lawZ P S σ̄ t̄` |
+| `Exec.lawZ_close` | — | with shift rejection, either table, every `σ̄ ∈ [σmin, σmax]` and every `t̄`: `lawZ ≤ (1 + 2⁻⁴⁰)·D_{σ̄,t̄}` pointwise and `χ²(lawZ ‖ D_{σ̄,t̄}) ≤ 2⁻⁷⁶` |
+| `Exec.samplerZ_mgf` | — | for `a ≥ 2`, uniform bits (`UnifBits ub`) and `σ̄ ∈ [σmin, σmax]`: the Rényi MGF of order `a` of SamplerZ with shift rejection against `D_{σ̄,t̄}` is `≤ exp((a − 1)·εZ a)`, `εZ a = a/2·(1 + 2⁻⁴⁰)^(a−2)·2⁻⁷⁶` |
+| `Exec.samplerZ_tv` | 2026/2902 Alg. 9 | for uniform bits (`UnifBits ub`) and `σ̄ ∈ [σmin, σmax]`, saturating instead of rejecting moves at most `2⁻¹¹⁰` per call in total variation |
+| `Exec.falcon512_exec_sampler_vs_true` | — | `falcon512_exec_vs_true` with the executable signer running `samplerZ falcon512S C.samp ub`, on keys whose stored leaves lie in `[σmin, σmax]` (`SampKey`), for every SamplerZ choice (`C.samp`; the signer uses the plain centre, `C.samp.centre` is not read), on uniform bits `ub` (`UnifBits`): `2^(1/64)·(T·2⁻¹²⁶ + 2⁻¹⁴⁰) + ε < Pr_exec[s] ⇒ T·2⁻¹³¹ < Pr_Y[s] + 2⁻¹⁴¹`, `ε = 0` with shift rejection and `2⁻⁶¹` with saturated shifts; the perfect-sampler hypotheses remain only on ideal worlds |
+| `Exec.exec_sampler_worlds_exist` | — | those ideal-world hypotheses and `UnifBits` hold together in one monad |
+
+The sampler step is a Rényi step of order `2¹⁴` over the `1024K ≤ 2⁴⁹` SamplerZ calls. With saturated shifts (the
+spec's own SamplerZ) the additive `2⁻⁶¹` makes the statement empty for success `≤ 2⁻⁶¹` and is most of the threshold
+for `T ≤ 2⁶⁴`. By `#eval`: the 16 SamplerZ test vectors of spec Table 3.2 (output and bytes used), with the 72-bit
+table, saturated and with shift rejection.
+
+### Design-space pairs
+
+For pairs of `Choices`: equality on every input under stated conditions, or an input on which the two differ.
+Witness inputs are round-3 KAT entries 0 and 70 with scripted SamplerZ draws (call `j` reads a script, then fixed
+draws); the theorems `wit_*` are proved implications `wit*B = true → the outputs differ`, and each `wit*B` is
+`true` by `#eval`.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.signMsgX_32_64` | 2026/1531 §3.4 | `check`, `checkRange` at `i = 32` and `i = 64`, every sampler clamped to `⌊t̄⌋ ± W`: the signers whose attempts run on 96-bit and 128-bit words give the same output on every message, salt source and hash |
+| `Exec.signMsgZ_32_64` | — | the same with the executable SamplerZ (`W = 19`), unclamped, on every random-bit source |
+| `Exec.falcon512_exec_word_sampler_vs_true` | — | `falcon512_exec_sampler_vs_true` for the signer whose attempts run on `(i + 64)`-bit words, `1 ≤ i ≤ 64`, on keys passing `checkRange C i 19`; same hypotheses and constants |
+| `Exec.signX_rc`, `Exec.signMsgX_rc` | — | two roundings of stored constants whose tables (and, for the signer, stored `σ`) agree give the same attempt, resp. signer output, on every input |
+| `Exec.signMsgX_store` | 2026/2902 (iii), (iv) | choices that differ only in key expansion (`dm`, `root`, `xn`) give the same signer output on a key whose stored trees are equal |
+| `Exec.signLoopX_one`, `Exec.signMsgX_cap_add` | spec Alg. 10 | with cap 1, salt per attempt and reused salt are equal; with a fresh salt per attempt, cap `N + j` is cap `N` followed, on failure, by cap `j` |
+| `Exec.Witness.wit_target`, `wit_dm`, `wit_root`, `wit_rm_up`, `wit_rm_away`, `wit_rm_floor`, `wit_rc_floor`, `wit_qinv`, `wit_word_mf`, and `wit_*_sig` | 2026/2431 §3.1, §3.4; 2026/2902 (iii), (iv); 2026/1531 p. 15 | the attempts (`_sig`: the signers) differ: scale-first / multiply-first; `y/x` / `1/x·y` and plain / NTRU root at `xn = 0`; ties to even / ties up, ties up / ties away, ties to even / floor; stored constants ties to even / floor; `1/q` at 77 / 64 bits; multiply-first 32.64 / 64.64 (entry 70: `wit_word_mf_none`, no signature at 32.64, a signature at 64.64) |
+| `Exec.Witness.wit_centre`, `wit_salt`, `wit_cap` | 2026/2902; spec Alg. 10 | plain / fractional centre (attempts); reused salt / salt per attempt after one rejection (stand-in hashes); cap 1 / cap 27 |
+| `Exec.Witness.samp_base`, `samp_shift` | spec Table 3.1; 2026/2902 Alg. 9 | one SamplerZ call differs between the 72-bit table and `tab79` (with our 79-bit draw), and between saturated and rejected shifts; kernel-checked |
+
+### Encodings, HashToPoint and verification
+
+`Exec.Codec.EncChoices` and `VerChoices` carry the bit order, headers, the public key in coefficient or NTT form,
+field widths, a public-key hash in the secret key, the salt length, compressed or 12-bit signatures, padding, a
+coefficient bound, BUFF hashing, raw, pure or prehash messages, `⌊β²⌋` and an optional ∞-norm bound. `round3` and
+`round3V` are the round-3 (v1.2) instance; `fndsaProv` and `fndsaProvV` are a provisional reading of NIST's
+FIPS 206 status talk (Perlner, 2025), with placeholders for unpinned fields. Verification and the NTT form are at
+`n = 512`.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.Codec.decodePk_encodePk`, `decodeSk_encodeSk`, `decodeSig_encodeSig`, `decodeSm_encodeSm`, `encodePk_of_decodePk`, `encodeSk_of_decodeSk`, `encodeSig_of_decodeSig`, `encodeSm_of_decodeSm` | spec §3.11 | for every `EncChoices`: decoding an encoding returns the encoded value (under each theorem's well-formedness hypothesis), and a byte string that decodes is the encoding of its result |
+| `Exec.Codec.decompress_compress`, `compress_of_decompress` | spec §3.11.2, Alg. 17-18 | Decompress inverts Compress, for every coefficient bound; a string that decompresses to `s` is `Compress(s, slen)` |
+| `Exec.Codec.decodePk_round3`, `decodeSk_round3` | — | at `round3` the decoders agree with `Exec.Round3.decodePk`, `decodeSk` |
+| `Exec.Codec.hashToPoint_spec` | spec Alg. 3 | `hashToPoint n str = some c` ⇒ `c` is the output of Alg. 3 l. 4-9 on every long enough prefix of the SHAKE-256 stream of `str` (VCVio's `shake256`) |
+| `Exec.Codec.verifyCore_iff` | spec Alg. 16 l. 5-9 | acceptance iff some `s₁ ≡ c − s₂h (mod q)` in `ℤ[x]/(x⁵¹² + 1)` with `\|s₁ᵢ\| ≤ ⌊q/2⌋` has `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and passes the ∞-norm check |
+| `Exec.Codec.entryOk_of`, `entriesOk_of` | — | `entryOkB e = true` ⇒ `EntryOk e`: at `round3`, `pk`, `sk` and `sm` decode and re-encode byte for byte, the decoders agree with `Round3`, `sm` carries `msg`, a linear checksum (mod `2⁶¹ − 1`) of the hashed point equals a value computed outside Lean, the detached signature verifies, `openSm` accepts `sm` and rejects it with one bit flipped in the salt, in the message, or in the first byte of the compressed `s₂` |
+
+By `#eval`: `entryOkB` is `true` for all 100 entries of the round-3 `falcon512-KAT.rsp` (sha256
+`dd75c946…7354b5cd`), so the 300 one-bit mutations are rejected; HashToPoint equals the Python value in full for
+entries 0 and 70 (for the others a linear checksum of it is compared).
+
+### Reference vectors
+
+`Exec.refVecB δq k c z0 z1` is a ball trace of one signing attempt on the key `k` and hashed point `c`, conditioned
+on the SamplerZ outputs `(z0, z1)`: a complex disc (centre at 64 fraction bits, radius on the grid `2⁻⁹⁶`) for the
+FFTs of `c`, `f`, `F`, the target (hull of both target orders), and every node and leaf value of ffSampling.
+For a KAT entry, `(z0, z1)` is the unique `z` with `s = (c, 0) − z·B` for the entry's signature.
+
+| Lean | Paper / spec | Statement |
+|---|---|---|
+| `Exec.refVec_sound` | — | `C.word = none`, `twOk C.x.rc`, `check C.x C.xn δq k = true`, `refVecB δq k c z0 z1 = some V`: every intermediate of the attempt at `C` (`traceX`) lies in its ball |
+| `Exec.refVec_word` | — | the same at `(i + 64)`-bit words, `1 ≤ i`, when `V.magOkB C.target i` |
+| `Exec.refVec_exact` | — | `0 ≤ δq L` for every `L`: the exact attempt (exact FFT, true tree `k.trueTree`, exact operations) lies in the same balls |
+| `Exec.refVec_adm` | — | `refVec_sound` at every `C` with `Adm C` |
+| `Exec.signX_log` | — | `C.rchk = none`, `\|c i\| < q`, a sampler answering by the tape of `(z0, z1)`: `signX` returns `(z0, z1)` and the SamplerZ queries it makes are the trace's leaf values |
+| `Exec.katIn_spec` | — | `katIn e = some (k, c, s1, s2, z0, z1)` ⇒ `k` is the decoded `sk`, `c` the Lean HashToPoint of `sm`'s salt and message, `s1 = s1Of c s2 h`, and `sOf k c z0 z1 = (s1, s2)` |
+
+By `#eval` (`Exec.genVecAt`; the JSON printer is not proved): vectors for KAT entries 0 and 70 at `δ45q` and at
+`δ127q`, and for entry 27 at `δ45q` as a control (it fails `check` at every evaluated point, so `refVec_sound` does
+not apply to it there).
+
+Which test vectors fixed-point implementations of Falcon should be checked against has been raised in public:
+the CRYPTO 2026 talk "Toward a fixed-point implementation of the Falcon signature scheme" by De Almeida Braga,
+Fouque, Lachguel and Prest asks, on its slide "KAT conformance", "Alternative set of KATs for fixed-point Falcon ?",
+and the NIST pqc-forum thread "Fixed-point FN-DSA and special vs general purpose" (August 2026) discusses test
+vectors (CAVP) generated from a fixed-point implementation.
+
+## Related work
+
+- Tian, Dong, Zhang, Wang, "Formal Verification Techniques for Implementing Post-quantum Cryptography Falcon"
+  (in Chinese), Journal of Software 36(11):4990-5007, 2025: a Jasmin implementation of Falcon-512 signing and
+  verification; EasyCrypt proofs of Montgomery multiplication and the NTT and of the values of the FFT root table;
+  a proof of integer Gaussian sampling outlined, not completed.
+- Vincent Hwang, "Formal Verification of Emulated Floating-Point Arithmetic in Falcon", IACR ePrint 2024/321, 2024:
+  a CryptoLine model of the emulated floating-point addition, subtraction and multiplication of the Falcon
+  submission package; shows that a discrepancy in the multiplication does not affect the complex FFT in signature
+  generation; the author's Armv7-M and Jasmin floating-point multiplications proved equivalent to the model.
+- Hannes Hacker, Shekoufeh Neisarian, Sara Zain, Elif Bilge Kavun, "PQMZ: Formally Verified Falcon-PKR for
+  Post-Quantum Cryptographic Migration in Zcash", IACR ePrint 2026/2260, 2026: a machine-checked EasyCrypt
+  formalisation of Falcon-PKR in the random oracle model, and machine-checked correctness of honest signing under an
+  abstract Falcon signing interface.
+- Bas Spitters, "CatCrypt: From Rust to Cryptographic Security in Lean", IACR ePrint 2026/604, 2026: a Lean library
+  of security proofs in the computational model; lists FN-DSA (FIPS 206) among its constructions.
+
 ## Assumptions and limits
+
+This section covers releases 0.2.0-0.4.0; the limits of the executable track are in [LIMITS.md](LIMITS.md).
 
 - The sampler is perfect: SamplerZ returns exact discrete Gaussians, as assumed by the paper's theorems.
 - Everything other than SamplerZ's parameters is assumed identical in the three worlds: signature assembly, norm
@@ -289,9 +470,11 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
   the stored tree within `δ` of the true tree (`‖ℓ̂ − ℓ‖∞ ≤ δ L` at depth `L + 1`, `|σ̄/σ − 1| ≤ 2⁻⁴²` at every
   leaf), and the true leaves in `[1.2778, 1.825]`.
 - `δ127` (`2⁻⁵⁸` at the root, `2⁻⁶³` below) is a target value for a key expansion at `p = 127` stored in 64-bit
-  words; no such key expansion exists in Lean. The constants of `δ63` (`0.8123·2⁻⁴⁰` at the root, `0.7072·2⁻⁴¹`
-  below) are numerical estimates, not proved. For `δ63`, the leaf condition has the form of `LDL.falcon512_leaf`,
-  which is conditional on its own hypotheses and whose tree is not tied to `KeyB.trueTree` in Lean.
+  words. Hop B formalises no key expansion; the executable track's key expansion (at `64 + xn` fraction bits) is
+  tied to `δ127` only by its per-key check, which is `true` for a key by `#eval` only ([LIMITS.md](LIMITS.md)). The
+  constants of `δ63` (`0.8123·2⁻⁴⁰` at the root, `0.7072·2⁻⁴¹` below) are numerical estimates, not proved. For
+  `δ63`, the leaf condition has the form of `LDL.falcon512_leaf`, which is conditional on its own hypotheses and
+  whose tree is not tied to `KeyB.trueTree` in Lean.
 - SamplerZ is perfect in every world (`hE`, `hM`, `hF`). The composed theorems take all hypotheses of hop A
   (`falcon512_exact64n'`: `εq = 2⁻⁷⁸`, every auxiliary answer type inhabited) and start from F′; F (with the model's
   range checks) and `εq = 2⁻⁶⁵` are not composed with hop B.
@@ -303,12 +486,13 @@ calls `sign1` at most `K` times (restarts included) and otherwise makes only aux
 - The clamp at `y = 30.5` (every SamplerZ answer within `30.5` of its true centre) is a proof device; no signer
   clamps. It costs `≤ 2⁻¹⁴¹` in X and in Y; in the composed theorems the X side is absorbed into
   `T·2⁻¹²⁸ ≥ T·2⁻¹²⁹ + 2⁻¹⁴¹ + 2⁻¹⁴⁰`.
-- Not proved: a model of key expansion giving `Close δ` (at `p = 127` or `p = 63`); NTRUSolve (nothing ties `g, G`
-  to `f, F`; `fG − gF = q` is not assumed); the range `[1.2778, 1.825]` of the true leaves (paper §4.1, from
-  `αGPV ≤ 1.17`); any query bound above `2³⁹`; and what S8 does not prove.
+- Not proved: that key expansion gives `Close δ` (at `p = 127` or `p = 63`) for any key (the executable track's
+  check implies it per key; no key is proved to pass the check); NTRUSolve (nothing ties `g, G` to `f, F`;
+  `fG − gF = q` is not assumed); the range `[1.2778, 1.825]` of the true leaves (paper §4.1, from `αGPV ≤ 1.17`);
+  any query bound above `2³⁹`; and what S8 does not prove.
 
-Open: a model of key expansion giving `Close δ`; NTRUSolve; the range of the true leaves; query bounds above `2³⁹`; the
-multiply-first order; the split path; Falcon-1024.
+Open: a proof, for some key, that key expansion gives `Close δ`; NTRUSolve; the range of the true leaves; query
+bounds above `2³⁹`; the multiply-first order; the split path; Falcon-1024.
 
 ## Building
 
@@ -318,11 +502,15 @@ Requires [elan](https://github.com/leanprover/elan). The toolchain and the VCVio
 ```sh
 lake exe cache get   # optional: download Mathlib's build cache
 lake build           # every module, including S7, S8 and hop B (FalconPrecision/Errors, by glob)
-lake build Axioms    # guarded #print axioms (test/Axioms.lean, test/S7Axioms.lean) and the end-to-end example
+lake build Axioms    # guarded #print axioms (test/Axioms.lean, test/S7Axioms.lean and the executable-track tests), the executable-track tests (every test/Exec*.lean except test/ExecEquivEval.lean) and the end-to-end example
 ```
 
-Both commands have been run on x86_64 and aarch64; every guarded `#print axioms` reports only `propext`,
-`Classical.choice` and `Quot.sound`.
+For release 0.5.0, both commands were run on x86_64 and on aarch64 (Linux, Lean `v4.35.0`, every dependency at its
+pinned commit, no previously built module of this repository); every guarded `#print axioms` reports only `propext`,
+`Classical.choice` and `Quot.sound`. On both, every `#eval` fact of [LIMITS.md](LIMITS.md) that `lake build Axioms`
+does not check (E1, E2, E3, E8, E12, E17) was then re-run as described in [evidence/README.md](evidence/README.md):
+each output equals the recorded one (run times excepted; the E8 and E12 runs print nothing), and the vector files
+have the sha256 in `SHA256SUMS`.
 
 ## Development
 
@@ -334,7 +522,14 @@ its constructors are `UsesG.pure`, `UsesG.query`, `UsesG.sign`; `ffs`, `splitC`,
 abbreviations of `ffsU` (through `ffsG`), `splitCU`, `mergeCU`, `updCU` and `joinU`, so their equation lemmas
 differ; `InB` and `InC` are defined through `InBR` and `InCR`. 0.4.0 adds the modules `Errors.HopBCore` and
 `Errors.HopB` and changes no earlier module; `test/S7Axioms.lean` guards the four hop B theorems.
+0.5.0 adds the modules `Exec.*` (`FalconPrecision/Exec/`), the tests `test/Exec*.lean` (all but
+`test/ExecEquivEval.lean` are `Axioms` roots), `evidence/` and `scripts/`, and changes no earlier module.
+
+## Acknowledgements
+
+Developed with the assistance of Claude models (Anthropic).
 
 ## License
 
-Apache 2.0, as VCVio and Mathlib.
+Apache 2.0, as VCVio and Mathlib. Some files contain values from the Falcon round-3 submission package (its
+known-answer-test file and specification test vectors); their source and terms are in [NOTICE](NOTICE).
