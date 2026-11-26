@@ -89,7 +89,7 @@ measured RMSE gives over `2n·Qs = 2⁷⁰` calls (no restarts).
 | `Falcon.centers_budget` | — | `2³⁸·(49·3.65·2⁻³² + 135700·2⁻⁴²)² ≤ 2⁻⁹` |
 | `Errors.FFSamp.input_err` | §7.3, Table 4 | `(t̂0, t̂1) = (−FFT(c/q)⊙F̂, FFT(c/q)⊙f̂)`: ℓ2 error `≤ 3.65·2⁻³²` |
 | `Errors.FFSamp.falcon512_centers` | Alg. 8, Table 4 | budgets (assumed) ⇒ `√Σ(t̄ − t)² ≤ 49·‖δt̂‖₂ + 135700·2⁻⁴²` |
-| `Errors.FFSamp.ffs_pathS`, `ffs_pathN` | Alg. 8 | along every execution of the model `ffs` (budgets derived, not assumed): `Σ(t̄ − t)² ≤ (Ā_L·e + C̄_L)²` for input ℓ2 error `≤ e`; `≤ 2^(L+1)` SamplerZ calls |
+| `Errors.FFSamp.ffs_pathS`, `ffs_pathN` | Alg. 8 | along every execution of the model `ffs` (budgets derived, not assumed): `Σ(t̄ − t)² ≤ (Ā_L·e + C̄_L)²` for input ℓ2 error `≤ e` when `L ≤ 9` and `Ā_L·e + C̄_L ≤ 2⁻¹⁰`; `≤ 2^(L+1)` SamplerZ calls |
 | `Errors.FFSamp.Uses.pathS`, `Uses.pathN` | — | `K` calls of `sign1`: `K·(49·3.65·2⁻³² + 135700·2⁻⁴²)²`, `1024·K` |
 | `Errors.LDL.falcon512_leaf` | Lemma 8, §7.3 item 3 | given `hroot`, `hstep`, `hs`: leaves `\|σ̄ᵢ/σᵢ − 1\| ≤ 2⁻⁴²` |
 | `Errors.FFTRec.fft_rec_err` | §7.3 item 1 | recursive FFT error `E_{L+1} = (2 + δ)E_L + δ·2^L·A + r` |
