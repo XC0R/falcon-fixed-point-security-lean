@@ -17,7 +17,12 @@ along every execution; `etvDist_simulateQ_rewrite_hist` is `RenyiPath.etvDist_si
 with the per-query bound needed only on the queries of the post-processed run satisfying `P`, the
 budget on the original run, and no answer type required to be inhabited. `ffsB_clamp`: along every
 history of a call with SamplerZ answers clamped to within `y` of the true centre, the squared centre
-differences sum to `≤ (gainA L·X + cB y δ L)²` for input difference `X`. -/
+differences sum to `≤ (gainA L·X + cB y δ L)²` for input difference `X`.
+
+Stated at every size (keys `KeyBP`, true tree `KeyBP.trueTree σ`): `KeyBP.Good σ δ`,
+`GoodKeyP`, `signBP`, `signTP`, `runKP`, `runBP`, `runTP`, the budgets `gainAP`, `devBP`, `cBP`,
+`s2BP` over node bounds `Λ` and depth `D`, and `ffsB_clampP`; the Falcon-512 names are their
+instances. -/
 
 @[expose] public section
 
@@ -62,28 +67,48 @@ noncomputable def ffldl (σ : ℝ) : (L : ℕ) → (g00 g10 g11 : Out L → ℂ)
 /-- Falcon-512's `σ = 165.736617183` (spec Table 3.3). -/
 noncomputable def σ512 : ℝ := 165736617183 / 10 ^ 9
 
-/-- Exact FFT of an integer polynomial of size `2⁹`. -/
-noncomputable def fftZ (a : Fin (2 ^ 9) → ℤ) : Out 9 → ℂ := fftE fun i => (a i : ℂ)
+/-- Exact FFT of an integer polynomial of size `2^logn`. -/
+noncomputable def fftZ {logn : ℕ} (a : Fin (2 ^ logn) → ℤ) : Out logn → ℂ :=
+  fftE fun i => (a i : ℂ)
 
-/-- A signing key with the whole basis `B = [[g, -f], [G, -F]]`. -/
-structure KeyB extends Key where
-  g : Fin (2 ^ 9) → ℤ
-  G : Fin (2 ^ 9) → ℤ
+/-- A signing key of size `2^logn` with the whole basis `B = [[g, -f], [G, -F]]`. -/
+structure KeyBP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ)
+    extends toKey : KeyP logn γf γF σlo hlo Λ where
+  g : Fin (2 ^ logn) → ℤ
+  G : Fin (2 ^ logn) → ℤ
+
+/-- A Falcon-512 signing key with the whole basis `B = [[g, -f], [G, -F]]`. -/
+abbrev KeyB : Type := KeyBP 9 255 3500 (1277833697 / 10 ^ 9) σmin512_ok lam512
 
 /-- `(B·B⋆)₀₀ = gg⋆ + ff⋆`. -/
-noncomputable def KeyB.gram00 (k : KeyB) (o : Out 9) : ℂ :=
+noncomputable def KeyBP.gram00 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (k : KeyBP logn γf γF σlo hlo Λ) (o : Out logn) : ℂ :=
   fftZ k.g o * conj (fftZ k.g o) + fftZ k.f o * conj (fftZ k.f o)
 
 /-- `(B·B⋆)₁₀ = Gg⋆ + Ff⋆`. -/
-noncomputable def KeyB.gram10 (k : KeyB) (o : Out 9) : ℂ :=
+noncomputable def KeyBP.gram10 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (k : KeyBP logn γf γF σlo hlo Λ) (o : Out logn) : ℂ :=
   fftZ k.G o * conj (fftZ k.g o) + fftZ k.F o * conj (fftZ k.f o)
 
 /-- `(B·B⋆)₁₁ = GG⋆ + FF⋆`. -/
-noncomputable def KeyB.gram11 (k : KeyB) (o : Out 9) : ℂ :=
+noncomputable def KeyBP.gram11 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (k : KeyBP logn γf γF σlo hlo Λ) (o : Out logn) : ℂ :=
   fftZ k.G o * conj (fftZ k.G o) + fftZ k.F o * conj (fftZ k.F o)
 
-/-- **The true tree**: exact ffLDL⋆ of `B·B⋆` at Falcon-512. -/
-noncomputable def KeyB.trueTree (k : KeyB) : LTree 9 := ffldl σ512 9 k.gram00 k.gram10 k.gram11
+/-- **The true tree** at the signing `σ`: exact ffLDL⋆ of `B·B⋆` (depth `logn`). -/
+noncomputable def KeyBP.trueTree {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (σ : ℝ) (k : KeyBP logn γf γF σlo hlo Λ) : LTree logn :=
+  ffldl σ logn k.gram00 k.gram10 k.gram11
+
+/-- **The true tree** at Falcon-512 (`σ = σ512`). -/
+noncomputable def KeyB.trueTree (k : KeyB) : LTree 9 := KeyBP.trueTree σ512 k
+
+/-! The name of `KeyB`'s constructor before the size parameter (`KeyB.mk`), as an alias of
+`KeyBP.mk`. -/
+
+namespace KeyB
+export KeyBP (mk)
+end KeyB
 
 theorem isReal_conj {L : ℕ} {v : Out L → ℂ} (h : IsReal v) : IsReal fun o => conj (v o) :=
     fun o => by
@@ -102,29 +127,38 @@ theorem isReal_ffldl (σ : ℝ) : ∀ (L : ℕ)
       isReal_ffldl σ L _ _ _ s0.1 (isReal_conj s0.2) s0.1,
           isReal_ffldl σ L _ _ _ s1.1 (isReal_conj s1.2) s1.1⟩
 
-theorem isReal_fftZ (a : Fin (2 ^ 9) → ℤ) : IsReal (fftZ a) :=
-  isReal_evalAt (L := 9) (fun i => (a i : ℂ)) fun _ => map_intCast _ _
+theorem isReal_fftZP {logn : ℕ} (a : Fin (2 ^ logn) → ℤ) : IsReal (fftZ a) :=
+  isReal_evalAt (L := logn) (fun i => (a i : ℂ)) fun _ => map_intCast _ _
+
+theorem isReal_fftZ (a : Fin (2 ^ 9) → ℤ) : IsReal (fftZ a) := isReal_fftZP a
+
+/-- **The true tree is real** at every size and `σ`: every `ℓ` of exact ffLDL⋆ of `B·B⋆` is the FFT
+of a real polynomial. -/
+theorem isReal_trueTreeP {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (σ : ℝ) (k : KeyBP logn γf γF σlo hlo Λ) : (KeyBP.trueTree σ k).Real := by
+  have hg := isReal_fftZP k.g
+  have hf := isReal_fftZP k.f
+  have hG := isReal_fftZP k.G
+  have hF := isReal_fftZP k.F
+  refine isReal_ffldl σ logn _ _ _ (fun o => ?_) (fun o => ?_) (fun o => ?_) <;>
+    simp only [KeyBP.gram00, KeyBP.gram10, KeyBP.gram11, hg o, hf o, hG o, hF o, map_add, map_mul,
+      Complex.conj_conj]
 
 /-- **The true tree is real**: every `ℓ` of exact ffLDL⋆ of `B·B⋆` is the FFT of a real polynomial.
 -/
-theorem isReal_trueTree (k : KeyB) : k.trueTree.Real := by
-  have hg := isReal_fftZ k.g
-  have hf := isReal_fftZ k.f
-  have hG := isReal_fftZ k.G
-  have hF := isReal_fftZ k.F
-  refine isReal_ffldl σ512 9 _ _ _ (fun o => ?_) (fun o => ?_) (fun o => ?_) <;>
-    simp only [KeyB.gram00, KeyB.gram10, KeyB.gram11, hg o, hf o, hG o, hF o, map_add, map_mul,
-      Complex.conj_conj]
+theorem isReal_trueTree (k : KeyB) : k.trueTree.Real := isReal_trueTreeP σ512 k
 
 /--
 **Stored tree against true tree**: `‖ℓ̂ - ℓ‖∞ ≤ δ L` at every node of depth `L + 1`; at every leaf
 the true `σ` in `[1.2778, 1.825]` and `|σ̄/σ - 1| ≤ 2⁻⁴²` (`Falcon.CallP.hΔσ`). -/
-def Close (δ : ℕ → ℝ) : {L : ℕ} → FTree L → LTree L → Prop
+def Close {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (δ : ℕ → ℝ) :
+    {L : ℕ} → FTreeP σlo hlo Λ L → LTree L → Prop
   | _, .leaf σb _, .leaf σ => (12778 / 10000 ≤ σ ∧ σ ≤ 1825 / 1000) ∧ |σb / σ - 1| ≤ 1 / 2 ^ 42
-  | _, @FTree.node L ℓh _ T0 T1, .node ℓ U0 U1 => (∀ o, ‖ℓh o - ℓ o‖ ≤ δ L) ∧ Close δ T0 U0 ∧
-      Close δ T1 U1
+  | _, .node (L := L) ℓh _ T0 T1, .node ℓ U0 U1 => (∀ o, ‖ℓh o - ℓ o‖ ≤ δ L) ∧
+      Close δ T0 U0 ∧ Close δ T1 U1
 
-theorem Close.inRange {δ : ℕ → ℝ} : {L : ℕ} → {T : FTree L} → {U : LTree L} → Close δ T U →
+theorem Close.inRange {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {δ : ℕ → ℝ} :
+    {L : ℕ} → {T : FTreeP σlo hlo Λ L} → {U : LTree L} → Close δ T U →
     U.InRange
   | _, .leaf _ _, .leaf _, h => h.1
   | _, .node _ _ _ _, .node _ _ _, h => ⟨Close.inRange h.2.1, Close.inRange h.2.2⟩
@@ -134,7 +168,8 @@ def outPt : (L : ℕ) → Out L
   | 0 => ()
   | L + 1 => (outPt L, false)
 
-theorem Close.delta_nonneg {δ : ℕ → ℝ} : {L : ℕ} → {T : FTree L} → {U : LTree L} → Close δ T U →
+theorem Close.delta_nonneg {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {δ : ℕ → ℝ} :
+    {L : ℕ} → {T : FTreeP σlo hlo Λ L} → {U : LTree L} → Close δ T U →
     ∀ j < L, 0 ≤ δ j
   | _, .leaf _ _, .leaf _, _, j, hj => absurd hj (Nat.not_lt_zero j)
   | _, .node _ _ _ _, .node _ _ _, h, j, hj => by
@@ -143,22 +178,50 @@ theorem Close.delta_nonneg {δ : ℕ → ℝ} : {L : ℕ} → {T : FTree L} → 
     · exact (norm_nonneg _).trans (h.1 (outPt _))
 
 /--
-Conditions of hop B on a signing key: the stored tree is real (hop A, `FTree.Real`) and `Close δ` to
-the true tree. -/
-structure KeyB.Good (δ : ℕ → ℝ) (k : KeyB) : Prop where
+Conditions of hop B on a signing key, true tree at the signing `σ`: the stored tree is real (hop A,
+`FTreeP.Real`) and `Close δ` to the true tree. -/
+structure KeyBP.Good {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (σ : ℝ)
+    (δ : ℕ → ℝ) (k : KeyBP logn γf γF σlo hlo Λ) : Prop where
   real : k.tree.Real
-  close : Close δ k.tree k.trueTree
+  close : Close δ k.tree (KeyBP.trueTree σ k)
+
+/--
+Conditions of hop B on a Falcon-512 signing key: the stored tree is real (hop A, `FTreeP.Real`) and
+`Close δ` to the true tree. -/
+abbrev KeyB.Good (δ : ℕ → ℝ) (k : KeyB) : Prop := KeyBP.Good σ512 δ k
+
+/-! The name of `KeyB.Good`'s constructor before the size parameter, as an alias of
+`KeyBP.Good.mk`; its fields as theorems. -/
+
+namespace KeyB.Good
+export KeyBP.Good (mk)
+end KeyB.Good
+
+theorem KeyB.Good.real {δ : ℕ → ℝ} {k : KeyB} (h : k.Good δ) : k.tree.Real := h.1
+
+theorem KeyB.Good.close {δ : ℕ → ℝ} {k : KeyB} (h : k.Good δ) : Close δ k.tree k.trueTree := h.2
+
+/-- Keys passing `KeyBP.Good σ δ`. -/
+def GoodKeyP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ) (σ : ℝ)
+    (δ : ℕ → ℝ) : Type :=
+  {k : KeyBP logn γf γF σlo hlo Λ // k.Good σ δ}
 
 /-- Keys passing `KeyB.Good δ`. -/
 def GoodKey (δ : ℕ → ℝ) : Type := {k : KeyB // k.Good δ}
 
 /-! ## Signers -/
 
-/-- A SamplerZ call with the true leaf and centre (`σ`, `t`) and the stored ones (`σbar`, `tbar`).
--/
-def callB (σ σb t tb : ℝ) (hb : 1277833697 / 10 ^ 9 ≤ σb ∧ σb ≤ 18205 / 10000)
+/-- A SamplerZ call with the true leaf and centre (`σ`, `t`) and the stored ones (`σbar`, `tbar`),
+the stored leaf in the range `[1.2778, 1.825]` of `Falcon.CallP`. -/
+def callBP (σ σb t tb : ℝ) (hb : 12778 / 10000 ≤ σb ∧ σb ≤ 1825 / 1000)
     (h : (12778 / 10000 ≤ σ ∧ σ ≤ 1825 / 1000) ∧ |σb / σ - 1| ≤ 1 / 2 ^ 42) : Falcon.CallP :=
   ⟨σ, σb, t, tb, h.1, by linarith [hb.1], h.2⟩
+
+/-- A SamplerZ call with the true leaf and centre (`σ`, `t`) and the stored ones (`σbar`, `tbar`)
+of a Falcon-512 stored tree (`FTree`: stored leaf in `[σmin, σmax] = [1.277833697, 1.8205]`). -/
+def callB (σ σb t tb : ℝ) (hb : 1277833697 / 10 ^ 9 ≤ σb ∧ σb ≤ 18205 / 10000)
+    (h : (12778 / 10000 ≤ σ ∧ σ ≤ 1825 / 1000) ∧ |σb / σ - 1| ≤ 1 / 2 ^ 42) : Falcon.CallP :=
+  callBP σ σb t tb (leaf_range hb) h
 
 /-- Line 14 on exact values. -/
 noncomputable def joinE {L : ℕ} (s0 s1 : Samp L) : Samp (L + 1) :=
@@ -168,13 +231,16 @@ variable {ιA : Type} {aux : OracleSpec.{0, 0} ιA}
 
 /-- **ffSampling on both trees with the same samples**: true-tree centres `t0, t1` (factors `ℓ`),
 stored-tree centres `s0, s1` (factors `ℓ̂`), both exact. -/
-noncomputable def ffsB (δ : ℕ → ℝ) : {L : ℕ} → (T : FTree L) → (U : LTree L) → Close δ T U →
+noncomputable def ffsB {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (δ : ℕ → ℝ) :
+    {L : ℕ} → (T : FTreeP σlo hlo Λ L) → (U : LTree L) → Close δ T U →
     (t0 t1 s0 s1 : Out L → ℂ) → OracleComp (FalconGame.spec aux Falcon.CallP) (Samp L)
   | _, .leaf σb hb, .leaf σ, h, t0, t1, s0, s1 =>
     (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP)
-      (.inr (callB σ σb (t0 ()).re (s0 ()).re hb h))) : OracleComp _ ℤ) >>= fun z0 =>
+      (.inr (callBP σ σb (t0 ()).re (s0 ()).re (leaf_rangeP hlo hb) h))) : OracleComp _ ℤ) >>=
+        fun z0 =>
     (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP)
-      (.inr (callB σ σb (t1 ()).re (s1 ()).re hb h))) : OracleComp _ ℤ) >>= fun z1 =>
+      (.inr (callBP σ σb (t1 ()).re (s1 ()).re (leaf_rangeP hlo hb) h))) : OracleComp _ ℤ) >>=
+        fun z1 =>
     pure (Samp.leaf z0 z1)
   | _, .node ℓh _ T0 T1, .node ℓ U0 U1, h, t0, t1, s0, s1 =>
     ffsB δ T1 U1 h.2.2 (splitE t1).1 (splitE t1).2 (splitE s1).1 (splitE s1).2 >>= fun r1 =>
@@ -198,32 +264,91 @@ noncomputable def ffsT : {L : ℕ} → (U : LTree L) → U.InRange → (t0 t1 : 
     pure (joinE r0 r1)
 
 /-- A signature's integer part `z = (z0, z1)`, or `⊥`. -/
-abbrev Sig : Type := Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))
+abbrev Sig (logn : ℕ := 9) : Type := Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))
+
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
 
 open Classical in
-/-- One ffSampling call of signing (spec Alg. 10 l. 3, 6) on both trees. -/
-noncomputable def signB (δ : ℕ → ℝ) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
-    OracleComp (FalconGame.spec aux Falcon.CallP) Sig :=
+/-- One ffSampling call of signing (spec Alg. 10 l. 3, 6) on both trees, at every size. -/
+noncomputable def signBP (δ : ℕ → ℝ) (k : GoodKeyP logn γf γF σlo hlo Λ σ δ)
+    (c : Fin (2 ^ logn) → ℤ) : OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn) :=
   if ∀ i, |c i| < 12289 then
-    (fun s => some (s.z0, s.z1)) <$> ffsB δ k.1.tree k.1.trueTree k.2.close
+    (fun s => some (s.z0, s.z1)) <$> ffsB δ k.1.tree (KeyBP.trueTree σ k.1) k.2.close
       (t0E k.1.toKey c) (t1E k.1.toKey c) (t0E k.1.toKey c) (t1E k.1.toKey c)
   else pure none
 
 open Classical in
+/-- One ffSampling call of exact Falcon signing (spec Alg. 10 l. 3, 6) on the true tree, at every
+size. -/
+noncomputable def signTP (δ : ℕ → ℝ) (k : GoodKeyP logn γf γF σlo hlo Λ σ δ)
+    (c : Fin (2 ^ logn) → ℤ) : OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn) :=
+  if ∀ i, |c i| < 12289 then
+    (fun s => some (s.z0, s.z1)) <$> ffsT (KeyBP.trueTree σ k.1) k.2.close.inRange
+        (t0E k.1.toKey c) (t1E k.1.toKey c)
+  else pure none
+
+/-- Experiment oracles at every size: auxiliary oracles and a signing oracle on (key, hash). -/
+@[reducible] def specSP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ)
+    (σ : ℝ) (aux : OracleSpec.{0, 0} ιA) (δ : ℕ → ℝ) :
+    OracleSpec (ιA ⊕ (GoodKeyP logn γf γF σlo hlo Λ σ δ × (Fin (2 ^ logn) → ℤ))) :=
+  Sum.elim aux fun _ => Sig logn
+
+/-- One per signing query, at every size. -/
+def wKP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ) (σ : ℝ)
+    (δ : ℕ → ℝ) : ιA ⊕ (GoodKeyP logn γf γF σlo hlo Λ σ δ × (Fin (2 ^ logn) → ℤ)) → ℝ :=
+  Sum.elim (fun _ => 0) fun _ => 1
+
+/-- Answer signing queries by `sg`, auxiliary queries by themselves, at every size. -/
+noncomputable def signImplP {δ : ℕ → ℝ}
+    (sg : GoodKeyP logn γf γF σlo hlo Λ σ δ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn)) :
+    QueryImpl (specSP logn γf γF σlo hlo Λ σ aux δ)
+      (OracleComp (FalconGame.spec aux Falcon.CallP))
+  | .inl x => liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl x))
+  | .inr kc => sg kc.1 kc.2
+
+variable {δ : ℕ → ℝ}
+
+/-- Signing with a signer `sg` of the stored-tree key (`KeyP`) at every size. -/
+noncomputable def runKP
+    (sg : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn))
+    {α : Type} (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    OracleComp (FalconGame.spec aux Falcon.CallP) α :=
+  simulateQ (signImplP fun k c => sg k.1.toKey c) oe
+
+/-- Signing on both trees at every size. -/
+noncomputable def runBP (δ : ℕ → ℝ) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    OracleComp (FalconGame.spec aux Falcon.CallP) α :=
+  simulateQ (signImplP (signBP δ)) oe
+
+/-- Exact Falcon signing on the true tree at every size. -/
+noncomputable def runTP (δ : ℕ → ℝ) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    OracleComp (FalconGame.spec aux Falcon.CallP) α :=
+  simulateQ (signImplP (signTP δ)) oe
+
+end Generic
+
+/-- One ffSampling call of signing (spec Alg. 10 l. 3, 6) on both trees. -/
+noncomputable def signB (δ : ℕ → ℝ) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
+    OracleComp (FalconGame.spec aux Falcon.CallP) Sig :=
+  signBP δ k c
+
 /-- One ffSampling call of exact Falcon signing (spec Alg. 10 l. 3, 6) on the true tree. -/
 noncomputable def signT (δ : ℕ → ℝ) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
     OracleComp (FalconGame.spec aux Falcon.CallP) Sig :=
-  if ∀ i, |c i| < 12289 then
-    (fun s => some (s.z0, s.z1)) <$> ffsT k.1.trueTree k.2.close.inRange (t0E k.1.toKey c)
-        (t1E k.1.toKey c)
-  else pure none
+  signTP δ k c
 
 /-! ## Experiments -/
 
 /-- Experiment oracles: auxiliary oracles and a signing oracle on (key, hash). -/
 @[reducible] def specS (aux : OracleSpec.{0, 0} ιA) (δ : ℕ → ℝ) :
     OracleSpec (ιA ⊕ (GoodKey δ × (Fin (2 ^ 9) → ℤ))) :=
-  Sum.elim aux fun _ => Sig
+  specSP 9 255 3500 (1277833697 / 10 ^ 9) σmin512_ok lam512 σ512 aux δ
 
 /-- One per signing query. -/
 def wK (δ : ℕ → ℝ) : ιA ⊕ (GoodKey δ × (Fin (2 ^ 9) → ℤ)) → ℝ := Sum.elim (fun _ => 0) fun _ => 1
@@ -231,9 +356,8 @@ def wK (δ : ℕ → ℝ) : ιA ⊕ (GoodKey δ × (Fin (2 ^ 9) → ℤ)) → �
 /-- Answer signing queries by `sg`, auxiliary queries by themselves. -/
 noncomputable def signImpl {δ : ℕ → ℝ}
     (sg : GoodKey δ → (Fin (2 ^ 9) → ℤ) → OracleComp (FalconGame.spec aux Falcon.CallP) Sig) :
-    QueryImpl (specS aux δ) (OracleComp (FalconGame.spec aux Falcon.CallP))
-  | .inl x => liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl x))
-  | .inr kc => sg kc.1 kc.2
+    QueryImpl (specS aux δ) (OracleComp (FalconGame.spec aux Falcon.CallP)) :=
+  signImplP sg
 
 variable {δ : ℕ → ℝ} {εq : ℝ}
 
@@ -259,32 +383,52 @@ noncomputable def runT (δ : ℕ → ℝ) {α : Type} (oe : OracleComp (specS au
 
 /-! ## Budgets -/
 
+/-- ℓ2 gain from the input error of a stored-tree call at depth `L` to its leaf errors, node bounds
+`Λ`: `A₀ = 1`, `A_{L+1} = A_L·(Λ L + √(Λ L² + 4))/(2√2)` (largest singular value of
+`[[1, Λ L], [0, 1]]`, split `1/√2`). -/
+noncomputable def gainAP (Λ : ℕ → ℝ) : ℕ → ℝ
+  | 0 => 1
+  | L + 1 => gainAP Λ L * (Λ L + √(Λ L ^ 2 + 4)) / (2 * √2)
+
+/--
+ℓ2 bound on the true deviation `t - z` of a call at depth `L`, node bounds `Λ`, when every leaf
+answer lies within `y` of its centre: `D₀ = √2·y`, `D_{L+1} = √(2((1 + Λ L + δ L)² + 1))·D_L`. -/
+noncomputable def devBP (Λ : ℕ → ℝ) (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ
+  | 0 => √2 * y
+  | L + 1 => √(2 * ((1 + Λ L + δ L) ^ 2 + 1)) * devBP Λ y δ L
+
+/--
+Per-call bound on the sum of squared centre differences `(t̄ - t)²` at depth `D`, node bounds `Λ`:
+the `(t1 - ẑ1)(ℓ̂ - ℓ)` terms of the `2^(D-1-L)` nodes of depth `L + 1`, each through `gainAP Λ L`
+after the split. -/
+noncomputable def s2BP (Λ : ℕ → ℝ) (D : ℕ) (y : ℝ) (δ : ℕ → ℝ) : ℝ :=
+  (∑ L ∈ Finset.range D, gainAP Λ L * δ L * √(2 ^ (D - 1 - L)) * devBP Λ y δ L) ^ 2
+
+/-- Centre-difference budget injected below a call at depth `L`, node bounds `Λ`: `C₀ = 0`,
+`C_{L+1} = √2·C_L + gainAP Λ L·δ L·devBP Λ y δ L`. -/
+noncomputable def cBP (Λ : ℕ → ℝ) (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ
+  | 0 => 0
+  | L + 1 => √2 * cBP Λ y δ L + gainAP Λ L * δ L * devBP Λ y δ L
+
 /-- ℓ2 gain from the input error of a stored-tree call at depth `L` to its leaf errors: `A₀ = 1`,
 `A_{L+1} = A_L·(Λ + √(Λ² + 4))/(2√2)`, `Λ = lam512 L` (largest singular value of `[[1, Λ], [0, 1]]`,
 split `1/√2`). -/
-noncomputable def gainA : ℕ → ℝ
-  | 0 => 1
-  | L + 1 => gainA L * (lam512 L + √(lam512 L ^ 2 + 4)) / (2 * √2)
+noncomputable def gainA : ℕ → ℝ := gainAP lam512
 
 /--
 ℓ2 bound on the true deviation `t - z` of a call at depth `L` when every leaf answer lies within `y`
 of its centre: `D₀ = √2·y`, `D_{L+1} = √(2((1 + lam512 L + δ L)² + 1))·D_L`. -/
-noncomputable def devB (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ
-  | 0 => √2 * y
-  | L + 1 => √(2 * ((1 + lam512 L + δ L) ^ 2 + 1)) * devB y δ L
+noncomputable def devB (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ := devBP lam512 y δ
 
 /--
 Per-call bound on the sum of squared centre differences `(t̄ - t)²`: the `(t1 - ẑ1)(ℓ̂ - ℓ)` terms
 of the `2^(8-L)` nodes of depth `L + 1` (ℓ2 `≤ δ L·√(2^(8-L))·√2·devB y δ L`), each through
 `gainA L` after the split. -/
-noncomputable def s2B (y : ℝ) (δ : ℕ → ℝ) : ℝ :=
-  (∑ L ∈ Finset.range 9, gainA L * δ L * √(2 ^ (8 - L)) * devB y δ L) ^ 2
+noncomputable def s2B (y : ℝ) (δ : ℕ → ℝ) : ℝ := s2BP lam512 9 y δ
 
 /-- Centre-difference budget injected below a call at depth `L`: `C₀ = 0`,
 `C_{L+1} = √2·C_L + gainA L·δ L·devB y δ L`. -/
-noncomputable def cB (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ
-  | 0 => 0
-  | L + 1 => √2 * cB y δ L + gainA L * δ L * devB y δ L
+noncomputable def cB (y : ℝ) (δ : ℕ → ℝ) : ℕ → ℝ := cBP lam512 y δ
 
 /--
 Assumed tree error (`Close δ127`) of a key expansion at `p = 127` stored in 64-bit words: `2⁻⁵⁸` at
@@ -295,30 +439,37 @@ noncomputable def δ127 (L : ℕ) : ℝ := if L = 8 then 1 / 2 ^ 58 else 1 / 2 ^
 `0.8123·2⁻⁴⁰ ≥ 2⁻⁴⁰·³` at the root, `0.7072·2⁻⁴¹ ≥ 2⁻⁴¹·⁵` below. -/
 noncomputable def δ63 (L : ℕ) : ℝ := if L = 8 then 8123 / 10000 / 2 ^ 40 else 7072 / 10000 / 2 ^ 41
 
-theorem gainA_nonneg : ∀ L, 0 ≤ gainA L
+section Generic
+
+variable {Λ : ℕ → ℝ}
+
+theorem gainAP_nonneg (hΛ : ∀ L, 0 ≤ Λ L) : ∀ L, 0 ≤ gainAP Λ L
   | 0 => zero_le_one
   | L + 1 => by
-    rw [gainA]
+    rw [gainAP]
     exact div_nonneg
-        (mul_nonneg (gainA_nonneg L) (add_nonneg (lam512_nonneg L) (Real.sqrt_nonneg _)))
+        (mul_nonneg (gainAP_nonneg hΛ L) (add_nonneg (hΛ L) (Real.sqrt_nonneg _)))
       (by positivity)
 
-theorem devB_nonneg {y : ℝ} (hy : 0 ≤ y) (δ : ℕ → ℝ) : ∀ L, 0 ≤ devB y δ L
+theorem devBP_nonneg {y : ℝ} (hy : 0 ≤ y) (Λ : ℕ → ℝ) (δ : ℕ → ℝ) : ∀ L, 0 ≤ devBP Λ y δ L
   | 0 => mul_nonneg (Real.sqrt_nonneg _) hy
-  | L + 1 => mul_nonneg (Real.sqrt_nonneg _) (devB_nonneg hy δ L)
+  | L + 1 => mul_nonneg (Real.sqrt_nonneg _) (devBP_nonneg hy Λ δ L)
 
-theorem cB_nonneg {y : ℝ} (hy : 0 ≤ y) {δ : ℕ → ℝ} : ∀ L, (∀ j < L, 0 ≤ δ j) → 0 ≤ cB y δ L
+theorem cBP_nonneg (hΛ : ∀ L, 0 ≤ Λ L) {y : ℝ} (hy : 0 ≤ y) {δ : ℕ → ℝ} :
+    ∀ L, (∀ j < L, 0 ≤ δ j) → 0 ≤ cBP Λ y δ L
   | 0, _ => le_rfl
   | L + 1, h => by
-    rw [cB]
-    exact add_nonneg (mul_nonneg (Real.sqrt_nonneg _) (cB_nonneg hy L fun j hj => h j (by omega)))
-      (mul_nonneg (mul_nonneg (gainA_nonneg L) (h L (by omega))) (devB_nonneg hy δ L))
+    rw [cBP]
+    exact add_nonneg
+      (mul_nonneg (Real.sqrt_nonneg _) (cBP_nonneg hΛ hy L fun j hj => h j (by omega)))
+      (mul_nonneg (mul_nonneg (gainAP_nonneg hΛ L) (h L (by omega))) (devBP_nonneg hy Λ δ L))
 
-theorem cB_eq (y : ℝ) (δ : ℕ → ℝ) :
-    ∀ n, cB y δ n = ∑ L ∈ Finset.range n, gainA L * δ L * √(2 ^ (n - 1 - L)) * devB y δ L
-  | 0 => by simp [cB]
+theorem cBP_eq (Λ : ℕ → ℝ) (y : ℝ) (δ : ℕ → ℝ) :
+    ∀ n, cBP Λ y δ n =
+      ∑ L ∈ Finset.range n, gainAP Λ L * δ L * √(2 ^ (n - 1 - L)) * devBP Λ y δ L
+  | 0 => by simp [cBP]
   | n + 1 => by
-    rw [cB, cB_eq y δ n, Finset.sum_range_succ, Finset.mul_sum]
+    rw [cBP, cBP_eq Λ y δ n, Finset.sum_range_succ, Finset.mul_sum]
     congr 1
     · refine Finset.sum_congr rfl fun L hL => ?_
       have hL' := Finset.mem_range.1 hL
@@ -326,9 +477,27 @@ theorem cB_eq (y : ℝ) (δ : ℕ → ℝ) :
       ring
     · simp
 
-theorem s2B_eq (y : ℝ) (δ : ℕ → ℝ) : s2B y δ = cB y δ 9 ^ 2 := by
-  rw [cB_eq]
+theorem s2BP_eq (Λ : ℕ → ℝ) (D : ℕ) (y : ℝ) (δ : ℕ → ℝ) : s2BP Λ D y δ = cBP Λ y δ D ^ 2 := by
+  rw [cBP_eq]
   rfl
+
+theorem s2BP_nonneg (Λ : ℕ → ℝ) (D : ℕ) (y : ℝ) (δ : ℕ → ℝ) : 0 ≤ s2BP Λ D y δ := sq_nonneg _
+
+end Generic
+
+theorem gainA_nonneg : ∀ L, 0 ≤ gainA L := gainAP_nonneg lam512_nonneg
+
+theorem devB_nonneg {y : ℝ} (hy : 0 ≤ y) (δ : ℕ → ℝ) : ∀ L, 0 ≤ devB y δ L :=
+  devBP_nonneg hy lam512 δ
+
+theorem cB_nonneg {y : ℝ} (hy : 0 ≤ y) {δ : ℕ → ℝ} : ∀ L, (∀ j < L, 0 ≤ δ j) → 0 ≤ cB y δ L :=
+  cBP_nonneg lam512_nonneg hy
+
+theorem cB_eq (y : ℝ) (δ : ℕ → ℝ) :
+    ∀ n, cB y δ n = ∑ L ∈ Finset.range n, gainA L * δ L * √(2 ^ (n - 1 - L)) * devB y δ L :=
+  cBP_eq lam512 y δ
+
+theorem s2B_eq (y : ℝ) (δ : ℕ → ℝ) : s2B y δ = cB y δ 9 ^ 2 := s2BP_eq lam512 9 y δ
 
 theorem s2B_nonneg (y : ℝ) (δ : ℕ → ℝ) : 0 ≤ s2B y δ := sq_nonneg _
 
@@ -558,9 +727,14 @@ theorem PQ_mono {B B' : ℝ} (hB : B ≤ B') (t : ιA ⊕ Falcon.CallP) (h : PQ 
   · trivial
   · exact ⟨h.1.trans hB, h.2⟩
 
+/-- An output of a clamped `ffsB` call, node bounds `Λ`: `IsFFT`, deviation `t - ẑ` within
+`devBP Λ y δ L` in ℓ2. -/
+def GoodBP (Λ : ℕ → ℝ) (y : ℝ) (δ : ℕ → ℝ) {L : ℕ} (t0 t1 : Out L → ℂ) (s : Samp L) : Prop :=
+  IsFFT s ∧ l2 (pairF (t0 - s.e0) (t1 - s.e1)) ≤ devBP Λ y δ L
+
 /-- An output of a clamped `ffsB` call: `IsFFT`, deviation `t - ẑ` within `devB y δ L` in ℓ2. -/
 def GoodB (y : ℝ) (δ : ℕ → ℝ) {L : ℕ} (t0 t1 : Out L → ℂ) (s : Samp L) : Prop :=
-  IsFFT s ∧ l2 (pairF (t0 - s.e0) (t1 - s.e1)) ≤ devB y δ L
+  GoodBP lam512 y δ t0 t1 s
 
 theorem isFFT_joinE {L : ℕ} {s0 s1 : Samp L} (h0 : IsFFT s0)
     (h1 : IsFFT s1) : IsFFT (joinE s0 s1) :=
@@ -688,17 +862,18 @@ theorem simulateQ_clampQ_inr {β : Type} (y : ℝ) (q : Falcon.CallP)
   exact bind_map_left _ _ _
 
 /--
-**Centre differences of a clamped `ffsB` call.** Inputs: true centres real, stored minus true of ℓ2
-norm `≤ X`. Along every history of the call with SamplerZ answers clamped to within `y` of the true
-centre: the output is `GoodB`, every query has `(t̄ - t)² ≤ (gainA L·X + cB y δ L)²`, and so does
-the sum over the call. -/
-theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
+**Centre differences of a clamped `ffsB` call**, at every depth and node bounds `Λ ≥ 0`. Inputs:
+true centres real, stored minus true of ℓ2 norm `≤ X`. Along every history of the call with SamplerZ
+answers clamped to within `y` of the true centre: the output is `GoodBP`, every query has
+`(t̄ - t)² ≤ (gainAP Λ L·X + cBP Λ y δ L)²`, and so does the sum over the call. -/
+theorem ffsB_clampP {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ)
+    (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTreeP σlo hlo Λ L) :
     ∀ (U : LTree L) (h : Close δ T U), U.Real → ∀ (t0 t1 s0 s1 : Out L → ℂ), IsReal t0 → IsReal t1 →
       ∀ X, l2 (pairF (s0 - t0) (s1 - t1)) ≤ X →
-      Hist (PQ ((gainA L * X + cB y δ L) ^ 2)) (GoodB y δ t0 t1)
+      Hist (PQ ((gainAP Λ L * X + cBP Λ y δ L) ^ 2)) (GoodBP Λ y δ t0 t1)
           (simulateQ (clampQ y) (ffsB (aux := aux) δ T U h t0 t1 s0 s1)) ∧
         PathSum wS (simulateQ (clampQ y) (ffsB (aux := aux) δ T U h t0 t1 s0 s1))
-          ((gainA L * X + cB y δ L) ^ 2) := by
+          ((gainAP Λ L * X + cBP Λ y δ L) ^ 2) := by
   have hy0 : 0 ≤ y := by linarith
   have hre : ∀ a b : ℂ, (a.re - b.re) ^ 2 ≤ ‖a - b‖ ^ 2 := fun a b => by
     rw [← Complex.sub_re]
@@ -719,7 +894,7 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
     have hn0 := sq_nonneg ((s0 ()).re - (t0 ()).re)
     have hn1 := sq_nonneg ((s1 ()).re - (t1 ()).re)
     have hσ : σb ≤ 1825 / 1000 := by linarith [hb.2]
-    have e : (gainA 0 * X + cB y δ 0) ^ 2 = X ^ 2 := by simp [gainA, cB]
+    have e : (gainAP Λ 0 * X + cBP Λ y δ 0) ^ 2 = X ^ 2 := by simp [gainAP, cBP]
     rw [e]
     refine ⟨.query_bind _ _
         ⟨by change ((s0 ()).re - (t0 ()).re) ^ 2 ≤ X ^ 2; linarith, hσ⟩ fun z0 =>
@@ -738,7 +913,7 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
         rw [e1, ← Complex.ofReal_intCast, ← Complex.ofReal_sub, Complex.norm_real, Real.norm_eq_abs,
           abs_sub_comm]
         simpa using hz1
-      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (devB_nonneg hy0 δ 0) two_ne_zero).1 ?_
+      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (devBP_nonneg hy0 Λ δ 0) two_ne_zero).1 ?_
       rw [l2_pairF_sq, l2_out0, l2_out0]
       change ‖t0 () - (clamp y (t0 ()).re z0 : ℂ)‖ ^ 2 + ‖t1 () - (clamp y (t1 ()).re z1 : ℂ)‖ ^ 2 ≤
         (√2 * y) ^ 2
@@ -754,15 +929,15 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
     obtain ⟨hℓR, hU0, hU1⟩ := hU
     simp only [ffsB, simulateQ_bind, simulateQ_pure]
     have hδL : 0 ≤ δ L := (norm_nonneg _).trans (h.1 (outPt _))
-    have hA := gainA_nonneg L
-    have hC := cB_nonneg hy0 L (Close.delta_nonneg h.2.1)
-    have hD := devB_nonneg hy0 δ L
-    have hlam := lam512_nonneg L
+    have hA := gainAP_nonneg hΛ L
+    have hC := cBP_nonneg hΛ hy0 L (Close.delta_nonneg h.2.1)
+    have hD := devBP_nonneg hy0 Λ δ L
+    have hlam := hΛ L
     have hX0 : 0 ≤ X := (l2_nonneg _).trans hX
-    have hℓ' : ∀ o, ‖ℓ o‖ ≤ lam512 L + δ L := fun o =>
+    have hℓ' : ∀ o, ‖ℓ o‖ ≤ Λ L + δ L := fun o =>
       calc ‖ℓ o‖ = ‖ℓh o - (ℓh o - ℓ o)‖ := by rw [sub_sub_cancel]
         _ ≤ ‖ℓh o‖ + ‖ℓh o - ℓ o‖ := norm_sub_le _ _
-        _ ≤ lam512 L + δ L := add_le_add (hℓh o) (h.1 o)
+        _ ≤ Λ L + δ L := add_le_add (hℓh o) (h.1 o)
     have hs1 := splitE_sub s1 t1
     have hR1 := isReal_splitE h1
     obtain ⟨H1, P1⟩ :=
@@ -773,15 +948,15 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
       rw [hx1d, hs1.1, hs1.2, l2_pairF_sq]
       linarith [l2_splitE_sq (s1 - t1)]
     set P := l2 (fun o => (s0 - t0) o + (s1 - t1) o * ℓh o)
-    set X0 := (P + δ L * (√2 * devB y δ L)) / √2 with hX0d
+    set X0 := (P + δ L * (√2 * devBP Λ y δ L)) / √2 with hX0d
     have hX00 : 0 ≤ X0 := div_nonneg (add_nonneg (l2_nonneg _) (mul_nonneg hδL
       (mul_nonneg (Real.sqrt_nonneg _) hD))) (Real.sqrt_nonneg _)
-    have key : ∀ r1 : Samp L, GoodB y δ (splitE t1).1 (splitE t1).2 r1 →
-        IsReal (upd t0 t1 (mergeE r1) ℓ) ∧ l2 (t1 - mergeE r1) ^ 2 ≤ 2 * devB y δ L ^ 2 ∧
+    have key : ∀ r1 : Samp L, GoodBP Λ y δ (splitE t1).1 (splitE t1).2 r1 →
+        IsReal (upd t0 t1 (mergeE r1) ℓ) ∧ l2 (t1 - mergeE r1) ^ 2 ≤ 2 * devBP Λ y δ L ^ 2 ∧
         l2 (pairF ((splitE (upd s0 s1 (mergeE r1) ℓh)).1 - (splitE (upd t0 t1 (mergeE r1) ℓ)).1)
           ((splitE (upd s0 s1 (mergeE r1) ℓh)).2 - (splitE (upd t0 t1 (mergeE r1) ℓ)).2)) ≤ X0 := by
       intro r1 ⟨hf1, hd1⟩
-      have hz : l2 (t1 - mergeE r1) ^ 2 ≤ 2 * devB y δ L ^ 2 := by
+      have hz : l2 (t1 - mergeE r1) ^ 2 ≤ 2 * devBP Λ y δ L ^ 2 := by
         rw [l2_sub_mergeE_sq t1 r1]
         linarith [pow_le_pow_left₀ (l2_nonneg _) hd1 2]
       refine ⟨isReal_upd h0 h1 (isReal_mergeE hf1) hℓR, hz, ?_⟩
@@ -793,12 +968,12 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
         funext o
         simp only [upd, Pi.add_apply, Pi.sub_apply]
         ring
-      have hz' : l2 (t1 - mergeE r1) ≤ √2 * devB y δ L := by
+      have hz' : l2 (t1 - mergeE r1) ≤ √2 * devBP Λ y δ L := by
         refine (pow_le_pow_iff_left₀ (l2_nonneg _) (by positivity) two_ne_zero).1 ?_
         rw [mul_pow, Real.sq_sqrt (by norm_num)]
         exact hz
       have hvl : l2 (upd s0 s1 (mergeE r1) ℓh - upd t0 t1 (mergeE r1) ℓ) ≤ P + δ L *
-          (√2 * devB y δ L) := by
+          (√2 * devBP Λ y δ L) := by
         rw [hve]
         refine (l2_add_le _ _).trans (add_le_add le_rfl ?_)
         exact (l2_mul_le (fun o => ℓh o - ℓ o) _ _ hδL h.1).trans
@@ -806,21 +981,23 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
       refine (pow_le_pow_iff_left₀ (l2_nonneg _) hX00 two_ne_zero).1 ?_
       rw [l2_pairF_sq, l2_splitE_sq, hX0d, div_pow, Real.sq_sqrt (by norm_num)]
       exact div_le_div_of_nonneg_right (pow_le_pow_left₀ (l2_nonneg _) hvl 2) (by norm_num)
-    have hbud : (gainA L * x1 + cB y δ L) ^ 2 + (gainA L * X0 + cB y δ L) ^ 2 ≤
-        (gainA (L + 1) * X + cB y δ (L + 1)) ^ 2 := by
-      have hPQ : P ^ 2 + l2 (s1 - t1) ^ 2 ≤ ((lam512 L + √(lam512 L ^ 2 + 4)) / 2) ^ 2 * X ^ 2 :=
+    have hbud : (gainAP Λ L * x1 + cBP Λ y δ L) ^ 2 + (gainAP Λ L * X0 + cBP Λ y δ L) ^ 2 ≤
+        (gainAP Λ (L + 1) * X + cBP Λ y δ (L + 1)) ^ 2 := by
+      have hPQ : P ^ 2 + l2 (s1 - t1) ^ 2 ≤ ((Λ L + √(Λ L ^ 2 + 4)) / 2) ^ 2 * X ^ 2 :=
         (l2_update_sq_le (s0 - t0) (s1 - t1) ℓh hlam hℓh).trans
           (mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (l2_nonneg _) hX 2) (sq_nonneg _))
       have := budget_step hA hC hlam hX0 hD hδL (l2_nonneg _) hPQ hx1 (l2_nonneg _)
-      rw [gainA, cB]
+      rw [gainAP, cBP]
       exact this
-    have hb1 : (gainA L * x1 + cB y δ L) ^ 2 ≤ (gainA (L + 1) * X + cB y δ (L + 1)) ^ 2 := by
-      linarith [hbud, sq_nonneg (gainA L * X0 + cB y δ L)]
-    have hb0 : (gainA L * X0 + cB y δ L) ^ 2 ≤ (gainA (L + 1) * X + cB y δ (L + 1)) ^ 2 := by
-      linarith [hbud, sq_nonneg (gainA L * x1 + cB y δ L)]
+    have hb1 : (gainAP Λ L * x1 + cBP Λ y δ L) ^ 2 ≤
+        (gainAP Λ (L + 1) * X + cBP Λ y δ (L + 1)) ^ 2 := by
+      linarith [hbud, sq_nonneg (gainAP Λ L * X0 + cBP Λ y δ L)]
+    have hb0 : (gainAP Λ L * X0 + cBP Λ y δ L) ^ 2 ≤
+        (gainAP Λ (L + 1) * X + cBP Λ y δ (L + 1)) ^ 2 := by
+      linarith [hbud, sq_nonneg (gainAP Λ L * x1 + cBP Λ y δ L)]
     refine ⟨(H1.mono (PQ_mono hb1) fun _ h => h).bind fun r1 hr1 => ?_,
-      ((pathSum_bind_hist (T := (gainA L * X0 + cB y δ L) ^ 2 + 0) P1 H1 fun r1 hr1 => ?_).weaken
-          ?_ :
+      ((pathSum_bind_hist (T := (gainAP Λ L * X0 + cBP Λ y δ L) ^ 2 + 0) P1 H1
+          fun r1 hr1 => ?_).weaken ?_ :
       PathSum wS _ _)⟩
     · obtain ⟨hR0, hz, hx0⟩ := key r1 hr1
       obtain ⟨H0, -⟩ := ih0 U0 h.2.1 hU0 _ _ _ _ (isReal_splitE hR0).1 (isReal_splitE hR0).2 X0 hx0
@@ -828,16 +1005,16 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
       obtain ⟨hf1, -⟩ := hr1
       obtain ⟨hf0, hd0⟩ := hr0
       refine ⟨isFFT_joinE hf0 hf1, ?_⟩
-      change l2 (pairF (t0 - mergeE r0) (t1 - mergeE r1)) ≤ devB y δ (L + 1)
+      change l2 (pairF (t0 - mergeE r0) (t1 - mergeE r1)) ≤ devBP Λ y δ (L + 1)
       set t0' := upd t0 t1 (mergeE r1) ℓ
-      have hA' : l2 (t0' - mergeE r0) ^ 2 ≤ 2 * devB y δ L ^ 2 := by
+      have hA' : l2 (t0' - mergeE r0) ^ 2 ≤ 2 * devBP Λ y δ L ^ 2 := by
         rw [l2_sub_mergeE_sq t0' r0]
         linarith [pow_le_pow_left₀ (l2_nonneg _) hd0 2]
       have he : t0 - mergeE r0 = (t0' - mergeE r0) + fun o => -((t1 - mergeE r1) o * ℓ o) := by
         funext o
         simp only [t0', upd, Pi.add_apply, Pi.sub_apply]
         ring
-      have hd : l2 (t0 - mergeE r0) ≤ l2 (t0' - mergeE r0) + (lam512 L + δ L) *
+      have hd : l2 (t0 - mergeE r0) ≤ l2 (t0' - mergeE r0) + (Λ L + δ L) *
           l2 (t1 - mergeE r1) := by
         rw [he]
         refine (l2_add_le _ _).trans (add_le_add le_rfl ?_)
@@ -845,12 +1022,26 @@ theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
             (t1 - mergeE r1) o from
           funext fun o => mul_comm _ _]
         exact l2_mul_le _ _ _ (by positivity) hℓ'
-      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (devB_nonneg hy0 δ _) two_ne_zero).1 ?_
-      rw [l2_pairF_sq, devB]
+      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (devBP_nonneg hy0 Λ δ _) two_ne_zero).1 ?_
+      rw [l2_pairF_sq, devBP]
       exact dev_step (by positivity) hA' hz (l2_nonneg _) hd
     · obtain ⟨hR0, -, hx0⟩ := key r1 hr1
       obtain ⟨-, P0⟩ := ih0 U0 h.2.1 hU0 _ _ _ _ (isReal_splitE hR0).1 (isReal_splitE hR0).2 X0 hx0
       exact P0.bind fun _ => .pure _ le_rfl
     · linarith
+
+/--
+**Centre differences of a clamped `ffsB` call.** Inputs: true centres real, stored minus true of ℓ2
+norm `≤ X`. Along every history of the call with SamplerZ answers clamped to within `y` of the true
+centre: the output is `GoodB`, every query has `(t̄ - t)² ≤ (gainA L·X + cB y δ L)²`, and so does
+the sum over the call. -/
+theorem ffsB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {L : ℕ} (T : FTree L) :
+    ∀ (U : LTree L) (h : Close δ T U), U.Real → ∀ (t0 t1 s0 s1 : Out L → ℂ), IsReal t0 → IsReal t1 →
+      ∀ X, l2 (pairF (s0 - t0) (s1 - t1)) ≤ X →
+      Hist (PQ ((gainA L * X + cB y δ L) ^ 2)) (GoodB y δ t0 t1)
+          (simulateQ (clampQ y) (ffsB (aux := aux) δ T U h t0 t1 s0 s1)) ∧
+        PathSum wS (simulateQ (clampQ y) (ffsB (aux := aux) δ T U h t0 t1 s0 s1))
+          ((gainA L * X + cB y δ L) ^ 2) :=
+  ffsB_clampP lam512_nonneg y hy T
 
 end FalconPrecision.Errors.HopB

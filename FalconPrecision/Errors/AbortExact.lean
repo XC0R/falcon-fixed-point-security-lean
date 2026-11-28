@@ -18,9 +18,10 @@ centre, else the rounded centre (`clampQ`, `simulateQ_clampQ`; `AbortTV.etvDist_
 within `p y` of E per query).
 
 Route B′ (ℓ2 amplification). Along every history of T (`AllOut`), with the stored tree real
-(`FTree.Real`: every `ℓ̂` the FFT of a real polynomial, so the leaf centres are real, `FFTReal`) and
-`y ≤ 30`, the deviation `(t̂0 - ẑ0, t̂1 - ẑ1)` of a call at depth `L` has ℓ2 norm `≤ eT L` (`2·30² ≤
-eT 0²`, `eT (L+1)² ≥ 2((1 + Λ_L)² + 1)·eT L²`: merges are `√2` times unitary, line 10 adds `ℓ̂⊙δ1`),
+(`FTreeP.Real`: every `ℓ̂` the FFT of a real polynomial, so the leaf centres are real,
+`FFTReal`) and `y ≤ 30`, the deviation `(t̂0 - ẑ0, t̂1 - ẑ1)` of a call at depth `L` has ℓ2 norm
+`≤ eT L` (`2·30² ≤ eT 0²`, `eT (L+1)² ≥ 2((1 + Λ_L)² + 1)·eT L²`: merges are `√2` times unitary,
+line 10 adds `ℓ̂⊙δ1`),
 its input is a deterministic part in `‖·‖∞ ≤ 1792000 = 512·3500` (splits of the root target) plus a
 part of ℓ2 norm `≤ gT L`, and every checked exact value (the split inputs `t̂1`, `t̂0'` and the odd
 merge inputs `ẑ1` of both children) is in `‖·‖ ≤ R64 - 2` (`ffsG_clamp`). Then every check `chk`
@@ -58,7 +59,8 @@ namespace FalconPrecision.Errors.FFSamp
 Every stored `ℓ̂` is the FFT of a real polynomial (`IsReal`). A hypothesis on the stored tree, not a
 check: it holds by construction when only half the spectrum is stored (conjugates implied) or the
 rounding is sign-symmetric; full-spectrum storage rounded ties-up can violate it at ties. -/
-def FTree.Real : {L : ℕ} → FTree L → Prop
+def FTreeP.Real {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} :
+    {L : ℕ} → FTreeP σlo hlo Λ L → Prop
   | _, .leaf _ _ => True
   | _, .node ℓ _ T0 T1 => IsReal ℓ ∧ T0.Real ∧ T1.Real
 
@@ -314,6 +316,16 @@ theorem AllOut.mono {ι : Type} {spec : OracleSpec.{0, 0} ι} {α : Type} {P Q :
   | pure x hx => exact .pure x (hPQ x hx)
   | query_bind t k _ ih => exact .query_bind t k ih
 
+theorem allOut_simP (Y : ℝ)
+    (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
+        (OracleComp (FalconGame.spec aux Falcon.CallP)))
+    (hso : ∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
+        (so (.inr q) : OracleComp _ ℤ)) (q : Falcon.CallP) :
+    AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
+      (simulateQ so (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inr q))) :
+        OracleComp _ ℤ) :=
+  (congrArg (AllOut _) (simulateQ_spec_query (impl := so) (Sum.inr q))).mpr (hso q)
+
 theorem allOut_sim
     (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
         (OracleComp (FalconGame.spec aux Falcon.CallP)))
@@ -322,7 +334,7 @@ theorem allOut_sim
     AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ 30)
       (simulateQ so (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inr q))) :
         OracleComp _ ℤ) :=
-  (congrArg (AllOut _) (simulateQ_spec_query (impl := so) (Sum.inr q))).mpr (hso q)
+  allOut_simP 30 so hso q
 
 /-- ℓ2 bounds of the deviation of a call at depth `L` (route B′, `y = 30`). -/
 noncomputable def eT (L : ℕ) : ℝ :=
@@ -432,6 +444,10 @@ theorem norm_sub_le_of_pairF {L : ℕ} {t0 t1 : Out L → ℂ} {s : Samp L} {E :
 theorem isFFT_leaf (z0 z1 : ℤ) : IsFFT (Samp.leaf z0 z1) :=
   fun _ => ⟨by simp [Samp.leaf, evalAt], by simp [Samp.leaf, evalAt]⟩
 
+/-- Some output, `IsFFT`, deviation `≤ E L` in ℓ2. -/
+def GoodP (E : ℕ → ℝ) {L : ℕ} (t0 t1 : Out L → ℂ) (r : Option (Samp L)) : Prop :=
+  ∃ s, r = some s ∧ IsFFT s ∧ l2 (pairF (t0 - s.e0) (t1 - s.e1)) ≤ E L
+
 /-- Every history of a clamped `ffsG` call: some output, `IsFFT`, deviation `≤ eT L` in ℓ2. -/
 def Good {L : ℕ} (t0 t1 : Out L → ℂ) (r : Option (Samp L)) : Prop :=
   ∃ s, r = some s ∧ IsFFT s ∧ l2 (pairF (t0 - s.e0) (t1 - s.e1)) ≤ eT L
@@ -441,55 +457,65 @@ theorem norm_le_of_split {L : ℕ} {a r : Out L → ℂ} {B g : ℝ} (ha : ∀ o
   (norm_add_le _ _).trans (add_le_add (ha o) ((norm_le_l2 r o).trans hr))
 
 /--
-**Route B′ along the histories of T.** Inputs: real, a deterministic part in `‖·‖∞ ≤ 1792000` plus a
-part of ℓ2 norm `≤ gT L`. Then every checked exact value is in `‖·‖ ≤ R64 - 2`, so a check `chk`
-passing there leaves the clamped computation equal to the one without checks, and every history of
-the latter is `Good`. -/
-theorem ffsG_clamp (ρ : Arith) (u : ℝ)
+**Route B′ along the histories of T** for a tree of node bounds `Λ` and depth `≤ D`, answers within
+`Y` of their centres, and tables `eT`, `gT` (`2Y² ≤ eT 0²`; for `L < D`: `eT (L+1)² ≥ 2((1 + Λ L)² +
+1)·eT L²`, `gT (L+1) + 1.4143·Λ L·eT L ≤ 1.4142·gT L`, `B + gT (L+1) + 1.4143·Λ L·eT L ≤ Rc`,
+`B + gT L + eT L ≤ Rc`). Inputs: real, a deterministic part in `‖·‖∞ ≤ B` plus a part of ℓ2 norm
+`≤ gT L`. Then every checked exact value is in `‖·‖ ≤ Rc`, so a check `chk` passing there leaves the
+clamped computation equal to the one without checks, and every history of the latter has deviation
+`≤ eT L` (`GoodP eT`). -/
+theorem ffsG_clampP {σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (hΛ : ∀ L, 0 ≤ Λ L)
+    (Y B Rc : ℝ) (eT gT : ℕ → ℝ) (D : ℕ)
+    (htab : ∀ L, L < D → 2 * ((1 + Λ L) ^ 2 + 1) * eT L ^ 2 ≤ eT (L + 1) ^ 2 ∧
+      gT (L + 1) + Λ L * (14143 / 10000) * eT L ≤ 14142 / 10000 * gT L ∧
+      B + gT (L + 1) + Λ L * (14143 / 10000) * eT L ≤ Rc ∧
+      B + gT L + eT L ≤ Rc ∧ 0 ≤ eT L ∧ 0 ≤ gT L ∧ 0 ≤ gT (L + 1))
+    (heT0 : 2 * Y ^ 2 ≤ eT 0 ^ 2) (heT : ∀ L, 0 ≤ eT L) (ρ : Arith) (u : ℝ)
     (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
         (OracleComp (FalconGame.spec aux Falcon.CallP)))
-    (hso : ∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ 30)
+    (hso : ∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
         (so (.inr q) : OracleComp _ ℤ))
     (chk : (L : ℕ) → (Out L → ℂ) → (Out L → ℂ) → Prop)
-    (hchk : ∀ L vh v, (∀ o, ‖v o‖ ≤ 2 ^ 24 - 2) → chk L vh v) {L : ℕ} (T : FTree L) (hT : T.Real) :
-    L ≤ 9 → ∀ (t0 t1 t0h t1h a0 a1 r0 r1 : Out L → ℂ), t0 = a0 + r0 → t1 = a1 + r1 →
-      (∀ o, ‖a0 o‖ ≤ 1792000) → (∀ o, ‖a1 o‖ ≤ 1792000) → l2 r0 ≤ gT L → l2 r1 ≤ gT L →
+    (hchk : ∀ L vh v, (∀ o, ‖v o‖ ≤ Rc) → chk L vh v) {L : ℕ} (T : FTreeP σlo hlo Λ L)
+    (hT : T.Real) :
+    L ≤ D → ∀ (t0 t1 t0h t1h a0 a1 r0 r1 : Out L → ℂ), t0 = a0 + r0 → t1 = a1 + r1 →
+      (∀ o, ‖a0 o‖ ≤ B) → (∀ o, ‖a1 o‖ ≤ B) → l2 r0 ≤ gT L → l2 r1 ≤ gT L →
       IsReal t0 → IsReal t1 →
       simulateQ so (ffsG (aux := aux) ρ u chk T t0 t1 t0h t1h) =
         simulateQ so (ffsG (aux := aux) ρ u (fun _ _ _ => True) T t0 t1 t0h t1h) ∧
-      AllOut (Good t0 t1)
+      AllOut (GoodP eT t0 t1)
         (simulateQ so (ffsG (aux := aux) ρ u (fun _ _ _ => True) T t0 t1 t0h t1h)) := by
   induction T with
   | leaf σ h =>
     intro _ t0 t1 t0h t1h _ _ _ _ _ _ _ _ _ _ h0 h1
     refine ⟨rfl, ?_⟩
     simp only [ffsG, simulateQ_bind, simulateQ_pure]
-    refine (allOut_sim so hso _).bind fun z0 hz0 => (allOut_sim so hso _).bind fun z1 hz1 =>
+    refine (allOut_simP Y so hso _).bind fun z0 hz0 => (allOut_simP Y so hso _).bind fun z1 hz1 =>
       .pure _ ⟨_, rfl, isFFT_leaf _ _, ?_⟩
     have e0 : t0 () = ((t0 ()).re : ℂ) := Complex.ext (by simp) (by simpa using im_eq_zero h0 ())
     have e1 : t1 () = ((t1 ()).re : ℂ) := Complex.ext (by simp) (by simpa using im_eq_zero h1 ())
-    change |(z0 : ℝ) - (t0 ()).re| ≤ 30 at hz0
-    change |(z1 : ℝ) - (t1 ()).re| ≤ 30 at hz1
-    have d0 : ‖(t0 - (Samp.leaf z0 z1).e0) ()‖ ≤ 30 := by
-      change ‖t0 () - (z0 : ℂ)‖ ≤ 30
+    change |(z0 : ℝ) - (t0 ()).re| ≤ Y at hz0
+    change |(z1 : ℝ) - (t1 ()).re| ≤ Y at hz1
+    have d0 : ‖(t0 - (Samp.leaf z0 z1).e0) ()‖ ≤ Y := by
+      change ‖t0 () - (z0 : ℂ)‖ ≤ Y
       rw [e0, ← Complex.ofReal_intCast, ← Complex.ofReal_sub, Complex.norm_real, Real.norm_eq_abs,
         abs_sub_comm]
       linarith [hz0]
-    have d1 : ‖(t1 - (Samp.leaf z0 z1).e1) ()‖ ≤ 30 := by
-      change ‖t1 () - (z1 : ℂ)‖ ≤ 30
+    have d1 : ‖(t1 - (Samp.leaf z0 z1).e1) ()‖ ≤ Y := by
+      change ‖t1 () - (z1 : ℂ)‖ ≤ Y
       rw [e1, ← Complex.ofReal_intCast, ← Complex.ofReal_sub, Complex.norm_real, Real.norm_eq_abs,
         abs_sub_comm]
       linarith [hz1]
-    refine (pow_le_pow_iff_left₀ (l2_nonneg _) (by norm_num [eT]) two_ne_zero).1 ?_
+    refine (pow_le_pow_iff_left₀ (l2_nonneg _) (heT 0) two_ne_zero).1 ?_
     rw [l2_pairF_sq, l2_out0, l2_out0]
-    have := eT_zero
+    have := heT0
     nlinarith
         [norm_nonneg ((t0 - (Samp.leaf z0 z1).e0) ()), norm_nonneg ((t1 - (Samp.leaf z0 z1).e1) ())]
   | @node L ℓ hℓ T0 T1 ih0 ih1 =>
     intro hL t0 t1 t0h t1h a0 a1 r0 r1 ht0 ht1 ha0 ha1 hr0 hr1 h0 h1
-    obtain ⟨hE, hG, hC3, hC2, hE0, hG0, hG1⟩ := tables L (by omega)
-    have hlam := lam512_nonneg L
-    have hpos : 0 ≤ lam512 L * (14143 / 10000) * eT L :=
+    obtain ⟨hE, hG, hC3, hC2, hE0, hG0, hG1⟩ := htab L (by omega)
+    have hlam := hΛ L
+    have hpos : 0 ≤ Λ L * (14143 / 10000) * eT L :=
         mul_nonneg (mul_nonneg hlam (by norm_num)) hE0
     obtain ⟨hTℓ, hT0, hT1⟩ := hT
     -- child 1
@@ -505,10 +531,10 @@ theorem ffsG_clamp (ρ : Arith) (u : ℝ)
     -- the checks and the child-0 data, for a good child-1 output
     have key : ∀ s1 : Samp L, IsFFT s1 →
         l2 (pairF ((splitE t1).1 - s1.e0) ((splitE t1).2 - s1.e1)) ≤ eT L →
-        (∀ o, ‖s1.e1 o‖ ≤ 2 ^ 24 - 2) ∧ (∀ o, ‖upd t0 t1 (mergeE s1) ℓ o‖ ≤ 2 ^ 24 - 2) ∧
+        (∀ o, ‖s1.e1 o‖ ≤ Rc) ∧ (∀ o, ‖upd t0 t1 (mergeE s1) ℓ o‖ ≤ Rc) ∧
         l2 (t1 - mergeE s1) ^ 2 ≤ 2 * eT L ^ 2 ∧
         (∀ s0 : Samp L, l2 (pairF ((splitE (upd t0 t1 (mergeE s1) ℓ)).1 - s0.e0)
-          ((splitE (upd t0 t1 (mergeE s1) ℓ)).2 - s0.e1)) ≤ eT L → ∀ o, ‖s0.e1 o‖ ≤ 2 ^ 24 - 2) ∧
+          ((splitE (upd t0 t1 (mergeE s1) ℓ)).2 - s0.e1)) ≤ eT L → ∀ o, ‖s0.e1 o‖ ≤ Rc) ∧
         (simulateQ so (ffsG (aux := aux) ρ u chk T0 (splitE (upd t0 t1 (mergeE s1) ℓ)).1
             (splitE (upd t0 t1 (mergeE s1) ℓ)).2
                 (splitCU ρ u (updCU ρ u t0h t1h (mergeCU ρ u s1) ℓ)).1
@@ -517,7 +543,7 @@ theorem ffsG_clamp (ρ : Arith) (u : ℝ)
             (splitE (upd t0 t1 (mergeE s1) ℓ)).1 (splitE (upd t0 t1 (mergeE s1) ℓ)).2
             (splitCU ρ u (updCU ρ u t0h t1h (mergeCU ρ u s1) ℓ)).1
             (splitCU ρ u (updCU ρ u t0h t1h (mergeCU ρ u s1) ℓ)).2) ∧
-        AllOut (Good (splitE (upd t0 t1 (mergeE s1) ℓ)).1 (splitE (upd t0 t1 (mergeE s1) ℓ)).2)
+        AllOut (GoodP eT (splitE (upd t0 t1 (mergeE s1) ℓ)).1 (splitE (upd t0 t1 (mergeE s1) ℓ)).2)
           (simulateQ so (ffsG (aux := aux) ρ u (fun _ _ _ => True) T0
             (splitE (upd t0 t1 (mergeE s1) ℓ)).1 (splitE (upd t0 t1 (mergeE s1) ℓ)).2
             (splitCU ρ u (updCU ρ u t0h t1h (mergeCU ρ u s1) ℓ)).1
@@ -529,7 +555,7 @@ theorem ffsG_clamp (ρ : Arith) (u : ℝ)
       have hδ1 : l2 (t1 - mergeE s1) ≤ 14143 / 10000 * eT L := by
         refine (pow_le_pow_iff_left₀ (l2_nonneg _) (by positivity) two_ne_zero).1 ?_
         nlinarith
-      have hrr : l2 (r0 + fun o => (t1 - mergeE s1) o * ℓ o) ≤ gT (L + 1) + lam512 L *
+      have hrr : l2 (r0 + fun o => (t1 - mergeE s1) o * ℓ o) ≤ gT (L + 1) + Λ L *
           (14143 / 10000 * eT L) :=
         (l2_add_le _ _).trans (add_le_add hr0 (by
           rw [show (fun o => (t1 - mergeE s1) o * ℓ o) = fun o => ℓ o * (t1 - mergeE s1) o from
@@ -592,7 +618,7 @@ theorem ffsG_clamp (ρ : Arith) (u : ℝ)
         nlinarith [pow_le_pow_left₀ (l2_nonneg _) hd0 2]
       have he : t0 - mergeE s0 = (t0' - mergeE s0) + fun o => -((t1 - mergeE s1) o * ℓ o) := by
         funext o; simp only [t0', upd, Pi.add_apply, Pi.sub_apply]; ring
-      have hd : l2 (t0 - mergeE s0) ≤ l2 (t0' - mergeE s0) + lam512 L * l2 (t1 - mergeE s1) := by
+      have hd : l2 (t0 - mergeE s0) ≤ l2 (t0' - mergeE s0) + Λ L * l2 (t1 - mergeE s1) := by
         rw [he]
         refine (l2_add_le _ _).trans (add_le_add le_rfl ?_)
         rw [l2_neg, show (fun o => (t1 - mergeE s1) o * ℓ o) = fun o => ℓ o *
@@ -604,27 +630,71 @@ theorem ffsG_clamp (ρ : Arith) (u : ℝ)
       have hA0 : 0 ≤ A := l2_nonneg _
       have hB0 : 0 ≤ Bv := l2_nonneg _
       have hAB : A * Bv ≤ 2 * eT L ^ 2 := by nlinarith [sq_nonneg (A - Bv)]
-      have hsum : (A + lam512 L * Bv) ^ 2 ≤ 2 * eT L ^ 2 * (1 + lam512 L) ^ 2 := by
-        nlinarith [mul_le_mul_of_nonneg_left hAB (by positivity : (0 : ℝ) ≤ 2 * lam512 L),
-          mul_le_mul_of_nonneg_left hδ1 (sq_nonneg (lam512 L))]
-      have hd2 : l2 (t0 - mergeE s0) ^ 2 ≤ (A + lam512 L * Bv) ^ 2 :=
+      have hsum : (A + Λ L * Bv) ^ 2 ≤ 2 * eT L ^ 2 * (1 + Λ L) ^ 2 := by
+        nlinarith [mul_le_mul_of_nonneg_left hAB (by positivity : (0 : ℝ) ≤ 2 * Λ L),
+          mul_le_mul_of_nonneg_left hδ1 (sq_nonneg (Λ L))]
+      have hd2 : l2 (t0 - mergeE s0) ^ 2 ≤ (A + Λ L * Bv) ^ 2 :=
         pow_le_pow_left₀ (l2_nonneg _) hd 2
-      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (eT_nonneg _) two_ne_zero).1 ?_
+      refine (pow_le_pow_iff_left₀ (l2_nonneg _) (heT _) two_ne_zero).1 ?_
       rw [l2_pairF_sq]
       nlinarith
 
-/-- The root targets are FFTs of real polynomials. -/
-theorem isReal_t0E (k : Key) (c : Fin (2 ^ 9) → ℤ) : IsReal (t0E k c) := fun o => by
+/--
+**Route B′ along the histories of T.** Inputs: real, a deterministic part in `‖·‖∞ ≤ 1792000` plus a
+part of ℓ2 norm `≤ gT L`. Then every checked exact value is in `‖·‖ ≤ R64 - 2`, so a check `chk`
+passing there leaves the clamped computation equal to the one without checks, and every history of
+the latter is `Good`. -/
+theorem ffsG_clamp (ρ : Arith) (u : ℝ)
+    (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
+        (OracleComp (FalconGame.spec aux Falcon.CallP)))
+    (hso : ∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ 30)
+        (so (.inr q) : OracleComp _ ℤ))
+    (chk : (L : ℕ) → (Out L → ℂ) → (Out L → ℂ) → Prop)
+    (hchk : ∀ L vh v, (∀ o, ‖v o‖ ≤ 2 ^ 24 - 2) → chk L vh v) {L : ℕ} (T : FTree L) (hT : T.Real) :
+    L ≤ 9 → ∀ (t0 t1 t0h t1h a0 a1 r0 r1 : Out L → ℂ), t0 = a0 + r0 → t1 = a1 + r1 →
+      (∀ o, ‖a0 o‖ ≤ 1792000) → (∀ o, ‖a1 o‖ ≤ 1792000) → l2 r0 ≤ gT L → l2 r1 ≤ gT L →
+      IsReal t0 → IsReal t1 →
+      simulateQ so (ffsG (aux := aux) ρ u chk T t0 t1 t0h t1h) =
+        simulateQ so (ffsG (aux := aux) ρ u (fun _ _ _ => True) T t0 t1 t0h t1h) ∧
+      AllOut (Good t0 t1)
+        (simulateQ so (ffsG (aux := aux) ρ u (fun _ _ _ => True) T t0 t1 t0h t1h)) :=
+  ffsG_clampP lam512_nonneg 30 1792000 (2 ^ 24 - 2) eT gT 9 (fun L hL => tables L (by omega))
+    eT_zero eT_nonneg ρ u so hso chk hchk T hT
+
+section RootP
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+
+/-- The root targets are FFTs of real polynomials (keys of any size). -/
+theorem isReal_t0EP (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) :
+    IsReal (t0E k c) := fun o => by
   have h1 := isReal_evalAt (cdq c) (fun i => Complex.conj_ofReal _) o
   have h2 := isReal_evalAt (fun i => (k.F i : ℂ)) (fun i => map_intCast _ _) o
   simp only [t0E, fftE] at h1 h2 ⊢
   rw [h1, h2, map_neg, map_mul]
 
-theorem isReal_t1E (k : Key) (c : Fin (2 ^ 9) → ℤ) : IsReal (t1E k c) := fun o => by
+theorem isReal_t1EP (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) :
+    IsReal (t1E k c) := fun o => by
   have h1 := isReal_evalAt (cdq c) (fun i => Complex.conj_ofReal _) o
   have h2 := isReal_evalAt (fun i => (k.f i : ℂ)) (fun i => map_intCast _ _) o
   simp only [t1E, fftE] at h1 h2 ⊢
   rw [h1, h2, map_mul]
+
+end RootP
+
+/-- The root targets are FFTs of real polynomials. -/
+theorem isReal_t0E (k : Key) (c : Fin (2 ^ 9) → ℤ) : IsReal (t0E k c) := isReal_t0EP k c
+
+theorem isReal_t1E (k : Key) (c : Fin (2 ^ 9) → ℤ) : IsReal (t1E k c) := isReal_t1EP k c
+
+theorem norm_fftE_cdqP {logn : ℕ} (c : Fin (2 ^ logn) → ℤ) (hc : ∀ i, |c i| < 12289)
+    (o : Out logn) : ‖fftE (cdq c) o‖ ≤ 2 ^ logn := by
+  have ha : ∀ i, ‖cdq c i‖ ≤ 1 := fun i => by
+    have : |(c i : ℝ)| < 12289 := by exact_mod_cast hc i
+    rw [cdq, Complex.norm_real, Real.norm_eq_abs, abs_div, div_le_one (by norm_num)]
+    norm_num
+    linarith
+  exact (norm_evalAt_le _ _ (norm_pt logn o) 1 ha).trans (by simp)
 
 theorem norm_fftE_cdq (c : Fin (2 ^ 9) → ℤ) (hc : ∀ i, |c i| < 12289) (o : Out 9) :
     ‖fftE (cdq c) o‖ ≤ 512 := by
@@ -698,48 +768,70 @@ theorem sign164G_pathN (ρ : Arith64 εq) (chk : (L : ℕ) → (Out L → ℂ) �
   · exact .pure _ (by norm_num)
 
 /-- `ox` is `oa` with every call `sa key c` replaced by `sb key c` (at most `K` calls, each on a key
-with a real stored tree); every other query is auxiliary. -/
-inductive Swap (sa sb : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))))
-        :
+of size `2^logn` with a real stored tree); every other query is auxiliary. -/
+inductive SwapP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ)
+    (sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)))) :
     ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α →
       OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop
-  | pure (K : ℕ) {α : Type} (x : α) : Swap sa sb K (pure x) (pure x)
+  | pure (K : ℕ) {α : Type} (x : α) : SwapP logn γf γF σlo hlo Λ sa sb K (pure x) (pure x)
   | query (K : ℕ) {α : Type} (t : ιA)
       (k k' : (FalconGame.spec aux Falcon.CallP).Range (.inl t) →
         OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ u, Swap sa sb K (k u) (k' u)) :
-      Swap sa sb K
+      (h : ∀ u, SwapP logn γf γF σlo hlo Λ sa sb K (k u) (k' u)) :
+      SwapP logn γf γF σlo hlo Λ sa sb K
           (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl t)) >>= k)
         (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl t)) >>= k')
-  | sign (K : ℕ) {α : Type} (key : Key) (hkey : key.tree.Real) (c : Fin (2 ^ 9) → ℤ)
-      (k k' : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) →
+  | sign (K : ℕ) {α : Type} (key : KeyP logn γf γF σlo hlo Λ) (hkey : key.tree.Real)
+      (c : Fin (2 ^ logn) → ℤ)
+      (k k' : Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)) →
         OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ y, Swap sa sb K (k y) (k' y)) : Swap sa sb (K + 1) (sa key c >>= k) (sb key c >>= k')
+      (h : ∀ y, SwapP logn γf γF σlo hlo Λ sa sb K (k y) (k' y)) :
+      SwapP logn γf γF σlo hlo Λ sa sb (K + 1) (sa key c >>= k) (sb key c >>= k')
 
-section Swap
+/-- `ox` is `oa` with every call `sa key c` replaced by `sb key c` (at most `K` calls, each on a key
+with a real stored tree); every other query is auxiliary. -/
+abbrev Swap (sa sb : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP)
+      (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))) :
+    ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α →
+      OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop :=
+  SwapP 9 255 3500 (1277833697 / 10 ^ 9) σmin512_ok lam512 sa sb
 
-variable {sa sb : Key → (Fin (2 ^ 9) → ℤ) →
-  OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+/-! The names of `Swap`'s constructors before the size parameter, as aliases of the `SwapP`
+constructors. -/
 
-theorem Swap.usesG_left {K : ℕ} {α : Type} {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Swap sa sb K oa ox) : UsesG sa K oa := by
+namespace Swap
+export SwapP (pure query sign)
+end Swap
+
+section SwapP
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+  {sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP)
+      (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)))}
+
+theorem SwapP.usesG_left {K : ℕ} {α : Type}
+    {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : SwapP logn γf γF σlo hlo Λ sa sb K oa ox) : UsesGP logn γf γF σlo hlo Λ sa K oa := by
   induction h with
   | pure K x => exact .pure K x
   | query K t k k' _ ih => exact .query K t k ih
   | sign K key _ c k k' _ ih => exact .sign K key c k ih
 
-theorem Swap.usesG_right {K : ℕ} {α : Type}
+theorem SwapP.usesG_right {K : ℕ} {α : Type}
     {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Swap sa sb K oa ox) : UsesG sb K ox := by
+    (h : SwapP logn γf γF σlo hlo Λ sa sb K oa ox) : UsesGP logn γf γF σlo hlo Λ sb K ox := by
   induction h with
   | pure K x => exact .pure K x
   | query K t k k' _ ih => exact .query K t k' ih
   | sign K key _ c k k' _ ih => exact .sign K key c k' ih
 
-theorem Swap.simulateQ_eq {K : ℕ} {α : Type}
+theorem SwapP.simulateQ_eq {K : ℕ} {α : Type}
     {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Swap sa sb K oa ox)
+    (h : SwapP logn γf γF σlo hlo Λ sa sb K oa ox)
     (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
         (OracleComp (FalconGame.spec aux Falcon.CallP)))
     (hs : ∀ key c, key.tree.Real → simulateQ so (sa key c) = simulateQ so (sb key c)) :
@@ -748,6 +840,45 @@ theorem Swap.simulateQ_eq {K : ℕ} {α : Type}
   | pure K x => rfl
   | query K t k k' _ ih => simp only [simulateQ_bind, ih]
   | sign K key hkey c k k' _ ih => simp only [simulateQ_bind, hs key c hkey, ih]
+
+/-- **A signing loop is a `SwapP` instance**: spec Alg. 10 l. 4-11 with at most `n` calls, `sa` on
+one side and `sb` on the other. -/
+theorem SwapP.signLoopG {β : Type} (sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))))
+    (k : KeyP logn γf γF σlo hlo Λ) (hk : k.tree.Real) (c : Fin (2 ^ logn) → ℤ)
+    (acc : Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)) → Option β) :
+    ∀ n, SwapP (aux := aux) logn γf γF σlo hlo Λ sa sb n (signLoopG sa k c acc n)
+      (signLoopG sb k c acc n)
+  | 0 => SwapP.pure 0 none
+  | n + 1 => SwapP.sign n k hk c _ _ fun y => by
+    rcases acc y with _ | b
+    exacts [SwapP.signLoopG sa sb k hk c acc n, SwapP.pure n _]
+
+end SwapP
+
+section Swap
+
+variable {sa sb : Key → (Fin (2 ^ 9) → ℤ) →
+  OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+
+theorem Swap.usesG_left {K : ℕ} {α : Type} {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : Swap sa sb K oa ox) : UsesG sa K oa :=
+  SwapP.usesG_left h
+
+theorem Swap.usesG_right {K : ℕ} {α : Type}
+    {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : Swap sa sb K oa ox) : UsesG sb K ox :=
+  SwapP.usesG_right h
+
+theorem Swap.simulateQ_eq {K : ℕ} {α : Type}
+    {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : Swap sa sb K oa ox)
+    (so : QueryImpl (FalconGame.spec aux Falcon.CallP)
+        (OracleComp (FalconGame.spec aux Falcon.CallP)))
+    (hs : ∀ key c, key.tree.Real → simulateQ so (sa key c) = simulateQ so (sb key c)) :
+    simulateQ so oa = simulateQ so ox :=
+  SwapP.simulateQ_eq h so hs
 
 end Swap
 
@@ -759,14 +890,55 @@ theorem Swap.signLoopG {β : Type} (ρ : Arith64 εq) (k : Key) (hk : k.tree.Rea
     (acc : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) → Option β) :
     ∀ n, Swap (aux := aux) (sign164 ρ)
         (sign164G ρ fun _ _ _ => True) n (signLoopG (sign164 ρ) k c acc n)
-      (signLoopG (sign164G ρ fun _ _ _ => True) k c acc n)
-  | 0 => Swap.pure 0 none
-  | n + 1 => Swap.sign n k hk c _ _ fun y => by
-    rcases acc y with _ | b
-    exacts [Swap.signLoopG ρ k hk c acc n, Swap.pure n _]
+      (signLoopG (sign164G ρ fun _ _ _ => True) k c acc n) :=
+  SwapP.signLoopG _ _ k hk c acc
 
 variable {m : Type → Type*} [Monad m] [LawfulMonad m] [EvalDistSemantics m]
     [LawfulEvalDistSemantics m]
+
+/-- **Exact signing against abort-free exact signing**, for any pair of calls `sa`, `sb` with at
+most `N` SamplerZ queries each and equal under every answer rewriting within `Y` of the centre (keys
+with a real stored tree): within `2·p y·NK` in total variation, for `1/2 ≤ y ≤ Y`. -/
+theorem etvDist_E_XP {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))))
+    (N : ℝ) (hN : 0 ≤ N) (hNa : ∀ key c, PathSum w1 (sa key c) N)
+    (hNb : ∀ key c, PathSum w1 (sb key c) N) (Y y : ℝ) (hy : 1 / 2 ≤ y) (hyY : y ≤ Y)
+    (hcl : ∀ so : QueryImpl (FalconGame.spec aux Falcon.CallP)
+        (OracleComp (FalconGame.spec aux Falcon.CallP)),
+      (∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
+        (so (.inr q) : OracleComp _ ℤ)) →
+      ∀ key c, key.tree.Real → simulateQ so (sa key c) = simulateQ so (sb key c))
+    (implE : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    (K : ℕ) {α : Type} [MeasurableSpace α] {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : SwapP logn γf γF σlo hlo Λ sa sb K oa ox) :
+    (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ implE ox] ≤
+      2 * ENNReal.ofReal (pclamp y * (K * N)) := by
+  have hw0 : ∀ t, 0 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) t :=
+      fun t => by rcases t with _ | _ <;> simp [w1]
+  have hw1 : ∀ q, 1 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) (.inr q) := fun q => by simp [w1]
+  have h1 := etvDist_implT_le y (by linarith) implE hE w1 hw0 hw1
+    (UsesGP.path h.usesG_left w1 (fun _ => rfl) N hN hNa)
+  have h2 := etvDist_implT_le y (by linarith) implE hE w1 hw0 hw1
+    (UsesGP.path h.usesG_right w1 (fun _ => rfl) N hN hNb)
+  have heq : 𝒟[simulateQ (implT y implE) oa] = 𝒟[simulateQ (implT y implE) ox] := by
+    rw [← simulateQ_clampQ, ← simulateQ_clampQ,
+      h.simulateQ_eq _ fun key c hk =>
+        hcl _ (fun q => (allOut_clampQ hy q).mono fun _ h => h.trans hyY) key c hk]
+  calc (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ implE ox]
+      ≤ (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ (implT y implE) oa] +
+          (𝒟[simulateQ (implT y implE) oa]).etvDist 𝒟[simulateQ implE ox] :=
+        Measure.etvDist_triangle _ _ _
+    _ ≤ ENNReal.ofReal (pclamp y * (K * N)) + ENNReal.ofReal (pclamp y * (K * N)) := by
+        have h2' : (𝒟[simulateQ (implT y implE) oa]).etvDist 𝒟[simulateQ implE ox] ≤
+            ENNReal.ofReal (pclamp y * (K * N)) := by
+          rw [heq, Measure.etvDist_comm]
+          exact h2
+        exact add_le_add h1 h2'
+    _ = 2 * ENNReal.ofReal (pclamp y * (K * N)) := (two_mul _).symm
 
 /-- **Exact signing against abort-free exact signing**: within `2·p y·1024K` in total variation. -/
 theorem etvDist_E_X (ρ : Arith64 εq) (hεq : 0 ≤ εq) (e : ℝ) (he : inp64 εq ≤ e)
@@ -777,28 +949,9 @@ theorem etvDist_E_X (ρ : Arith64 εq) (hεq : 0 ≤ εq) (e : ℝ) (he : inp64 
     (K : ℕ) {α : Type} [MeasurableSpace α] {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
     (h : Swap (sign164 ρ) (sign164G ρ fun _ _ _ => True) K oa ox) :
     (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ implE ox] ≤
-      2 * ENNReal.ofReal (pclamp y * (K * 1024)) := by
-  have hw0 : ∀ t, 0 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) t :=
-      fun t => by rcases t with _ | _ <;> simp [w1]
-  have hw1 : ∀ q, 1 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) (.inr q) := fun q => by simp [w1]
-  have h1 := etvDist_implT_le y (by linarith) implE hE w1 hw0 hw1 (Uses64.pathN h.usesG_left)
-  have h2 := etvDist_implT_le y (by linarith) implE hE w1 hw0 hw1
-    (UsesG.path h.usesG_right w1 (fun _ => rfl) 1024 (by norm_num) (sign164G_pathN ρ _))
-  have heq : 𝒟[simulateQ (implT y implE) oa] = 𝒟[simulateQ (implT y implE) ox] := by
-    rw [← simulateQ_clampQ, ← simulateQ_clampQ,
-      h.simulateQ_eq _ fun key c hk => sign164_clamp ρ hεq e he he1 _
-        (fun q => (allOut_clampQ hy q).mono fun _ h => h.trans hy30) key hk c]
-  calc (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ implE ox]
-      ≤ (𝒟[simulateQ implE oa]).etvDist 𝒟[simulateQ (implT y implE) oa] +
-          (𝒟[simulateQ (implT y implE) oa]).etvDist 𝒟[simulateQ implE ox] :=
-        Measure.etvDist_triangle _ _ _
-    _ ≤ ENNReal.ofReal (pclamp y * (K * 1024)) + ENNReal.ofReal (pclamp y * (K * 1024)) := by
-        have h2' : (𝒟[simulateQ (implT y implE) oa]).etvDist 𝒟[simulateQ implE ox] ≤
-            ENNReal.ofReal (pclamp y * (K * 1024)) := by
-          rw [heq, Measure.etvDist_comm]
-          exact h2
-        exact add_le_add h1 h2'
-    _ = 2 * ENNReal.ofReal (pclamp y * (K * 1024)) := (two_mul _).symm
+      2 * ENNReal.ofReal (pclamp y * (K * 1024)) :=
+  etvDist_E_XP _ _ 1024 (by norm_num) (sign164_pathN ρ) (sign164G_pathN ρ _) 30 y hy hy30
+    (fun so hso key c hk => sign164_clamp ρ hεq e he he1 so hso key hk c) implE hE K h
 
 /-- `exp(-30²/(2·1.825²)) ≤ 2⁻¹⁹⁴`. -/
 theorem exp_thirty : Real.exp (-(30 ^ 2 / (2 * (1825 / 1000) ^ 2))) ≤ 1 / 2 ^ 194 := by
@@ -873,16 +1026,20 @@ noncomputable def clampQF (y : ℝ) :
     QueryImpl (FalconGame.spec aux Falcon.CallP) (OracleComp (FalconGame.spec aux Falcon.CallP)) :=
   fun t => fF y t <$> liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) t)
 
-theorem allOut_clampQF {y : ℝ} (hy : 1 / 2 ≤ y) (hy' : y ≤ 299 / 10) (q : Falcon.CallP) :
-    AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ 30)
+theorem allOut_clampQFP {y Y : ℝ} (hy : 1 / 2 ≤ y) (hyY : y + 1 / 16 ≤ Y) (q : Falcon.CallP) :
+    AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
         (clampQF (aux := aux) y (.inr q) : OracleComp _ ℤ) := by
   change AllOut _ ((clampF y q <$>
     (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inr q)) : OracleComp _
         ℤ)) :
       OracleComp _ ℤ)
   rw [map_eq_bind_pure_comp]
-  have h30 : y + 1 / 16 ≤ 30 := by linarith
-  exact .query_bind _ _ fun u => .pure _ ((abs_clampF_sub_le hy q u).trans h30)
+  exact .query_bind _ _ fun u => .pure _ ((abs_clampF_sub_le hy q u).trans hyY)
+
+theorem allOut_clampQF {y : ℝ} (hy : 1 / 2 ≤ y) (hy' : y ≤ 299 / 10) (q : Falcon.CallP) :
+    AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ 30)
+        (clampQF (aux := aux) y (.inr q) : OracleComp _ ℤ) :=
+  allOut_clampQFP hy (by linarith) q
 
 omit [Monad m] [LawfulMonad m] in
 theorem etvDist_map_clampF_le (mx : m ℤ) {q : Falcon.CallP}
@@ -912,19 +1069,29 @@ theorem etvDist_map_clampF_le (mx : m ℤ) {q : Falcon.CallP}
     gcongr
     exact σbar_le q
 
-/-- **Type 1 signing against abort-free Type 1 signing**, both answered by `implF`: within `2·p_F
-y·1024K`. -/
-theorem etvDist_F_F' (ρ : Arith64 εq) (hεq : 0 ≤ εq) (e : ℝ) (he : inp64 εq ≤ e)
-    (he1 : 49 * e + 43700 / 2 ^ 40 ≤ 1 / 2 ^ 10) (y : ℝ) (hy : 1 / 2 ≤ y) (hy' : y ≤ 299 / 10)
+/-- **Signing against abort-free signing, both answered by `implF`**, for any pair of calls `sa`,
+`sb` with at most `N` SamplerZ queries each, `Σ (t̄ - t)² ≤ S` per call of `sa`, and equal under
+every answer rewriting within `Y` of the centre (keys with a real stored tree): within `2·p_F y·NK`
+when `K·S ≤ 2⁻⁸` and `y + 1/16 ≤ Y`. -/
+theorem etvDist_F_F'P {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))))
+    (N S : ℝ) (hN : 0 ≤ N) (hS : 0 ≤ S) (hNa : ∀ key c, PathSum w1 (sa key c) N)
+    (hSa : ∀ key c, PathSum wS (sa key c) S) (Y y : ℝ) (hy : 1 / 2 ≤ y) (hyY : y + 1 / 16 ≤ Y)
+    (hcl : ∀ so : QueryImpl (FalconGame.spec aux Falcon.CallP)
+        (OracleComp (FalconGame.spec aux Falcon.CallP)),
+      (∀ q : Falcon.CallP, AllOut (fun z : ℤ => |(z : ℝ) - q.t| ≤ Y)
+        (so (.inr q) : OracleComp _ ℤ)) →
+      ∀ key c, key.tree.Real → simulateQ so (sa key c) = simulateQ so (sb key c))
     [hA : ∀ t, Nonempty (aux t)] (implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
     (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
       discreteGaussianMeasure q.σbar q.tbar)
-    (K : ℕ) (hKe : (K : ℝ) * (49 * e + 43700 / 2 ^ 40) ^ 2 ≤ 1 / 2 ^ 8) {α : Type}
-        [MeasurableSpace α]
+    (K : ℕ) (hKe : (K : ℝ) * S ≤ 1 / 2 ^ 8) {α : Type} [MeasurableSpace α]
     {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    (h : Swap (sign164 ρ) (sign164G ρ fun _ _ _ => True) K oa ox) :
+    (h : SwapP logn γf γF σlo hlo Λ sa sb K oa ox) :
     (𝒟[simulateQ implF oa]).etvDist 𝒟[simulateQ implF ox] ≤
-      2 * ENNReal.ofReal (pclampF y * (K * 1024)) := by
+      2 * ENNReal.ofReal (pclampF y * (K * N)) := by
   have hne : ∀ t, Nonempty ((FalconGame.spec aux Falcon.CallP).Range t) := fun t => by
     rcases t with x | q
     · exact hA x
@@ -951,26 +1118,43 @@ theorem etvDist_F_F' (ρ : Arith64 εq) (hεq : 0 ≤ εq) (e : ℝ) (he : inp64
     · refine (etvDist_map_clampF_le (implF (.inr q)) (hF q) (by linarith)).trans (le_of_eq ?_)
       simp only [w, w1, wS, Sum.elim_inr, one_mul, mul_one]
       congr
-  have hA : PathSum w oa (pclampF y * (K * 1024) + 0) :=
+  have hA : PathSum w oa (pclampF y * (K * N) + 0) :=
     (PathSum.mono (w' := fun t => pclampF y * w1 t) (pclampF_nonneg y) (fun _ => le_rfl)
-      (Uses64.pathN h.usesG_left)).add ((Uses64.pathS hεq e he he1 h.usesG_left).indicator hwS hKe)
+      (UsesGP.path h.usesG_left w1 (fun _ => rfl) N hN hNa)).add
+      ((UsesGP.path h.usesG_left wS (fun _ => rfl) S hS hSa).indicator hwS hKe)
   have heqC : simulateQ (clampQF y) oa = simulateQ (clampQF y) ox :=
-    h.simulateQ_eq _ fun key c hk => sign164_clamp ρ hεq e he he1 (clampQF y)
-        (allOut_clampQF hy hy') key hk c
+    h.simulateQ_eq _ fun key c hk => hcl (clampQF y) (allOut_clampQFP hy hyY) key c hk
   have hA' := hA.simulateQ_map (fF y) fun _ => rfl
-  have hX : PathSum w (simulateQ (clampQF y) ox) (pclampF y * (K * 1024) + 0) := heqC ▸ hA'
+  have hX : PathSum w (simulateQ (clampQF y) ox) (pclampF y * (K * N) + 0) := heqC ▸ hA'
   have h1 := etvDist_simulateQ_rewrite implF (fF y) (fun _ => rfl) zero_le_one w hw hB oa _ hA'
   have h2 := etvDist_simulateQ_rewrite implF (fF y) (fun _ => rfl) zero_le_one w hw hB ox _ hX
   calc (𝒟[simulateQ implF oa]).etvDist 𝒟[simulateQ implF ox]
       ≤ (𝒟[simulateQ implF oa]).etvDist 𝒟[simulateQ implF (simulateQ (clampQF y) oa)] +
           (𝒟[simulateQ implF (simulateQ (clampQF y) oa)]).etvDist 𝒟[simulateQ implF ox] :=
         Measure.etvDist_triangle _ _ _
-    _ ≤ ENNReal.ofReal (1 * (pclampF y * (K * 1024) + 0)) +
-          ENNReal.ofReal (1 * (pclampF y * (K * 1024) + 0)) := by
+    _ ≤ ENNReal.ofReal (1 * (pclampF y * (K * N) + 0)) +
+          ENNReal.ofReal (1 * (pclampF y * (K * N) + 0)) := by
         refine add_le_add h1 ?_
         rw [heqC, Measure.etvDist_comm]
         exact h2
-    _ = 2 * ENNReal.ofReal (pclampF y * (K * 1024)) := by rw [one_mul, add_zero, two_mul]
+    _ = 2 * ENNReal.ofReal (pclampF y * (K * N)) := by rw [one_mul, add_zero, two_mul]
+
+/-- **Type 1 signing against abort-free Type 1 signing**, both answered by `implF`: within `2·p_F
+y·1024K`. -/
+theorem etvDist_F_F' (ρ : Arith64 εq) (hεq : 0 ≤ εq) (e : ℝ) (he : inp64 εq ≤ e)
+    (he1 : 49 * e + 43700 / 2 ^ 40 ≤ 1 / 2 ^ 10) (y : ℝ) (hy : 1 / 2 ≤ y) (hy' : y ≤ 299 / 10)
+    [hA : ∀ t, Nonempty (aux t)] (implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    (K : ℕ) (hKe : (K : ℝ) * (49 * e + 43700 / 2 ^ 40) ^ 2 ≤ 1 / 2 ^ 8) {α : Type}
+        [MeasurableSpace α]
+    {oa ox : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : Swap (sign164 ρ) (sign164G ρ fun _ _ _ => True) K oa ox) :
+    (𝒟[simulateQ implF oa]).etvDist 𝒟[simulateQ implF ox] ≤
+      2 * ENNReal.ofReal (pclampF y * (K * 1024)) :=
+  etvDist_F_F'P _ _ 1024 _ (by norm_num) (sq_nonneg _) (sign164_pathN ρ)
+    (sign164_pathS ρ hεq e he he1) 30 y hy (by linarith)
+    (fun so hso key c hk => sign164_clamp ρ hεq e he he1 so hso key hk c) implF hF K hKe h
 
 /-- `exp(-29.9²/(2·1.826²)) ≤ 2⁻¹⁹³`. -/
 theorem exp_299 : Real.exp (-((299 / 10) ^ 2 / (2 * (1826 / 1000) ^ 2))) ≤ 1 / 2 ^ 193 := by
@@ -1029,7 +1213,7 @@ calls of Type 1 ffSampling (`sign164`, the non-split scale-first chain of 2026/2
 model's range checks `‖·‖ ≤ R64 - 1`, `R64 = 2²⁴`, which deployed signers do not run) replaced by
 abort-free exact signing (`sign164G ρ (fun _ _ _ => True)`; `⊥` only for `c` with some `|c i| ≥ q`,
 as in every world), each call on a key whose stored `ℓ̂` are FFTs of real polynomials
-(`FTree.Real`), and otherwise only auxiliary queries (`Swap`): success `> T·2⁻¹²⁶` in F (Type 1
+(`FTreeP.Real`), and otherwise only auxiliary queries (`Swap`): success `> T·2⁻¹²⁶` in F (Type 1
 signing with `ρ` and those checks) gives success `> T·2⁻¹²⁸ - 2⁻¹⁴⁰` in X (abort-free exact signing
 on the stored tree, answered by `implE`). The check-free Type 1 signer F′ is covered by
 `falcon512_exact64n'`.
@@ -1038,7 +1222,7 @@ on the stored tree, answered by `implE`). The check-free Type 1 signer F′ is c
 2⁻³⁶)exp(-30²/(2·1.825²))`: clamping every SamplerZ answer to within `30` of its centre costs `p 30`
 per query (`GaussTail`, `AbortTV`), and with clamped answers no range check fires (`ffsG_clamp`,
 route B′). Not proved: hop B (stored tree to the true tree of the key); the `ℓ̂` bounds of `FTree`
-are checks added by this model, and `FTree.Real` is a hypothesis on the stored tree (it holds with
+are checks added by this model, and `FTreeP.Real` is a hypothesis on the stored tree (it holds with
 half-spectrum storage or sign-symmetric rounding); neither is in Falcon round 3 or the FIPS 206
 draft, and nothing ties the tree to the key. No implementation (2026/2431's fxp32.64 signer, [DAB26]
 64.64, c-fn-dsa) is shown to meet `sign164`'s operation sequence; the multiply-first order and the

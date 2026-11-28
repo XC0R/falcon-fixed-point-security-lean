@@ -57,26 +57,32 @@ namespace FalconPrecision.Errors.FFSamp
 variable {εq : ℝ}
 
 /-- `ĉ = FFT(c)` in Type 1, from the exact integers `c` (2026/2431 §3.1). -/
-noncomputable def chC64 (ρ : Arith64 εq) (c : Fin (2 ^ 9) → ℤ) : Out 9 → ℂ :=
-  ρ.fft (1 / 2 ^ 64) 9 fun i => (c i : ℂ)
+noncomputable def chC64 {logn : ℕ} (ρ : Arith64 εq) (c : Fin (2 ^ logn) → ℤ) : Out logn → ℂ :=
+  ρ.fft (1 / 2 ^ 64) logn fun i => (c i : ℂ)
 
 /-- `ĉ/q` in Type 1: the product by the stored `1/q`. -/
-noncomputable def cqC64 (ρ : Arith64 εq) (c : Fin (2 ^ 9) → ℤ) (o : Out 9) : ℂ :=
+noncomputable def cqC64 {logn : ℕ} (ρ : Arith64 εq) (c : Fin (2 ^ logn) → ℤ) (o : Out logn) : ℂ :=
     ρ.divq (chC64 ρ c o)
 
 /-- `t̂0 = (-ĉ/q) ⊙ F̂` in Type 1 (scale-first). -/
-noncomputable def t0C64 (ρ : Arith64 εq) (k : Key) (c : Fin (2 ^ 9) → ℤ) (o : Out 9) : ℂ :=
-  ρ.mul (1 / 2 ^ 64) (-cqC64 ρ c o) (ρ.fft (1 / 2 ^ 64) 9 (fun i => (k.F i : ℂ)) o)
+noncomputable def t0C64 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (ρ : Arith64 εq) (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) (o : Out logn) : ℂ :=
+  ρ.mul (1 / 2 ^ 64) (-cqC64 ρ c o) (ρ.fft (1 / 2 ^ 64) logn (fun i => (k.F i : ℂ)) o)
 
 /-- `t̂1 = (ĉ/q) ⊙ f̂` in Type 1 (scale-first). -/
-noncomputable def t1C64 (ρ : Arith64 εq) (k : Key) (c : Fin (2 ^ 9) → ℤ) (o : Out 9) : ℂ :=
-  ρ.mul (1 / 2 ^ 64) (cqC64 ρ c o) (ρ.fft (1 / 2 ^ 64) 9 (fun i => (k.f i : ℂ)) o)
+noncomputable def t1C64 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (ρ : Arith64 εq) (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) (o : Out logn) : ℂ :=
+  ρ.mul (1 / 2 ^ 64) (cqC64 ρ c o) (ρ.fft (1 / 2 ^ 64) logn (fun i => (k.f i : ℂ)) o)
 
-theorem fftE_cdq (c : Fin (2 ^ 9) → ℤ) (o : Out 9) :
+theorem fftE_cdqP {logn : ℕ} (c : Fin (2 ^ logn) → ℤ) (o : Out logn) :
     fftE (cdq c) o = fftE (fun i => (c i : ℂ)) o / 12289 := by
   simp only [fftE, evalAt, cdq, Finset.sum_div]
   refine Finset.sum_congr rfl fun i _ => ?_
   push_cast; ring
+
+theorem fftE_cdq (c : Fin (2 ^ 9) → ℤ) (o : Out 9) :
+    fftE (cdq c) o = fftE (fun i => (c i : ℂ)) o / 12289 :=
+  fftE_cdqP c o
 
 /-- ℓ2 norm of `f` from pointwise affine bounds `‖f i‖ ≤ ε‖g i‖ + κ`. -/
 theorem l2_le_affine {ι : Type} [Fintype ι] (f g : ι → ℂ) (ε κ : ℝ) (hε : 0 ≤ ε) (hκ : 0 ≤ κ)
@@ -178,12 +184,12 @@ theorem cqC64_err (ρ : Arith64 εq) (hεq : 0 ≤ εq) (c : Fin (2 ^ 9) → ℤ
       [l2_add_le (fun o => ρ.divq (ch o) - ch o / 12289) fun o => (fun _ => (1 / 12289 : ℂ)) o *
           (ch - C) o]
 
-/-- Certified FFT in Type 1 at Falcon-512 (`‖FFT(a)‖∞ ≤ B`): sup error `(δB + √2·2⁻⁶⁴)·Σ_{j<9}(2 +
+/-- Certified FFT in Type 1 at size `2^D` (`‖FFT(a)‖∞ ≤ B`): sup error `(δB + √2·2⁻⁶⁴)·Σ_{j<D}(2 +
 δ)^j`, `δ = 0.7072·2⁻⁶⁴`. -/
-theorem fft_cert64 (ρ : Arith64 εq) (B : ℝ) (a : Fin (2 ^ 9) → ℂ) (hB : ∀ o, ‖fftE a o‖ ≤ B)
-    (o : Out 9) :
-    ‖ρ.fft (1 / 2 ^ 64) 9 a o - fftE a o‖ ≤ (7072 / 10000 / 2 ^ 64 * B + 141422 / 100000 / 2 ^ 64) *
-      ∑ j ∈ Finset.range 9, (2 + 7072 / 10000 / 2 ^ 64) ^ j := by
+theorem fft_cert64P (ρ : Arith64 εq) (B : ℝ) {D : ℕ} (a : Fin (2 ^ D) → ℂ)
+    (hB : ∀ o, ‖fftE a o‖ ≤ B) (o : Out D) :
+    ‖ρ.fft (1 / 2 ^ 64) D a o - fftE a o‖ ≤ (7072 / 10000 / 2 ^ 64 * B + 141422 / 100000 / 2 ^ 64) *
+      ∑ j ∈ Finset.range D, (2 + 7072 / 10000 / 2 ^ 64) ^ j := by
   set E : ℕ → ℝ := fun L => Nat.rec (motive := fun _ => ℝ) 0
     (fun _ e => e * (2 + 7072 / 10000 / 2 ^ 64) + 7072 / 10000 / 2 ^ 64 * B + 141422 / 100000 /
         2 ^ 64) L
@@ -194,9 +200,17 @@ theorem fft_cert64 (ρ : Arith64 εq) (B : ℝ) (a : Fin (2 ^ 9) → ℂ) (hB : 
           (141422 / 100000 / 2 ^ 64) B E zeta ρ.tw pt pt_succ zeta_sq
     norm_zeta ρ.tw_err64 (fun L a => ρ.fft (1 / 2 ^ 64) L a)
         (fun a o => by change ‖a _ - a _‖ ≤ 0; simp)
-    (fun L a o => ⟨_, (ρ.mul_err (by positivity) _ _).trans sqrt_two_ulp64, rfl, rfl⟩) hE 9 a hB o
-  rw [cert_closed _ _ _ E hE 9] at h
+    (fun L a o => ⟨_, (ρ.mul_err (by positivity) _ _).trans sqrt_two_ulp64, rfl, rfl⟩) hE D a hB o
+  rw [cert_closed _ _ _ E hE D] at h
   simpa [E, fftE] using h
+
+/-- Certified FFT in Type 1 at Falcon-512 (`‖FFT(a)‖∞ ≤ B`): sup error `(δB + √2·2⁻⁶⁴)·Σ_{j<9}(2 +
+δ)^j`, `δ = 0.7072·2⁻⁶⁴`. -/
+theorem fft_cert64 (ρ : Arith64 εq) (B : ℝ) (a : Fin (2 ^ 9) → ℂ) (hB : ∀ o, ‖fftE a o‖ ≤ B)
+    (o : Out 9) :
+    ‖ρ.fft (1 / 2 ^ 64) 9 a o - fftE a o‖ ≤ (7072 / 10000 / 2 ^ 64 * B + 141422 / 100000 / 2 ^ 64) *
+      ∑ j ∈ Finset.range 9, (2 + 7072 / 10000 / 2 ^ 64) ^ j :=
+  fft_cert64P ρ B a hB o
 
 /--
 `F̂` by the certified FFT in Type 1 (`‖F̂‖∞ ≤ γF,G = 3500`): sup error `≤ 632776·2⁻⁶³` (arithmetic).
@@ -277,22 +291,35 @@ variable {ιA : Type} {aux : OracleSpec.{0, 0} ιA}
 open Classical in
 /-- One ffSampling call of Type 1 signing on the hash `c`: `none` (`⊥`) unless `|c i| < q`, else the
 integer `z = (z0, z1)` of `ffsU` at ulp `2⁻⁶⁴` with range checks `‖·‖ ≤ R64 - 1` (or `⊥`). -/
-noncomputable def sign164 (ρ : Arith64 εq) (k : Key) (c : Fin (2 ^ 9) → ℤ) :
+noncomputable def sign164 {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (ρ : Arith64 εq) (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) :
     OracleComp (FalconGame.spec aux Falcon.CallP)
-        (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))) :=
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))) :=
   if ∀ i, |c i| < 12289 then
     (fun r => r.map fun s => (s.z0, s.z1)) <$>
       ffsU ρ.toArith (1 / 2 ^ 64) R64 k.tree (t0E k c) (t1E k c) (t0C64 ρ k c) (t1C64 ρ k c)
   else pure none
 
 open Classical in
+/-- `sign164` with the range `R` in place of `R64`: range checks `‖·‖ ≤ R - 1` on the computed
+values. -/
+noncomputable def sign164R (R : ℝ) {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo}
+    {Λ : ℕ → ℝ} (ρ : Arith64 εq) (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) :
+    OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))) :=
+  if ∀ i, |c i| < 12289 then
+    (fun r => r.map fun s => (s.z0, s.z1)) <$>
+      ffsU ρ.toArith (1 / 2 ^ 64) R k.tree (t0E k c) (t1E k c) (t0C64 ρ k c) (t1C64 ρ k c)
+  else pure none
+
+open Classical in
 /-- `sign164` with the check `chk` on (computed, exact) pairs in place of the range checks (`ffsG`).
 -/
-noncomputable def sign164G (ρ : Arith64 εq) (chk : (L : ℕ) → (Out L → ℂ) → (Out L → ℂ) → Prop)
-    (k : Key)
-    (c : Fin (2 ^ 9) → ℤ) :
+noncomputable def sign164G {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (ρ : Arith64 εq) (chk : (L : ℕ) → (Out L → ℂ) → (Out L → ℂ) → Prop)
+    (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) :
     OracleComp (FalconGame.spec aux Falcon.CallP)
-        (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))) :=
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))) :=
   if ∀ i, |c i| < 12289 then
     (fun r => r.map fun s => (s.z0, s.z1)) <$>
       ffsG ρ.toArith (1 / 2 ^ 64) chk k.tree (t0E k c) (t1E k c) (t0C64 ρ k c) (t1C64 ρ k c)
@@ -335,26 +362,39 @@ theorem sign164_pathN (ρ : Arith64 εq) (k : Key) (c : Fin (2 ^ 9) → ℤ) :
 /-- `oa` calls `sign164` at most `K` times along every execution; every other query is auxiliary. -/
 def Uses64 (ρ : Arith64 εq) : ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α →
     Prop :=
-  UsesG (sign164 ρ)
+  UsesG (sign164 ρ : Key → (Fin (2 ^ 9) → ℤ) → _)
 
 /-- Spec Alg. 10 l. 4-11 with at most `n` calls of `sg`: `acc` returns a signature or restarts. -/
-noncomputable def signLoopG {β : Type} (sg : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))))
-    (k : Key) (c : Fin (2 ^ 9) → ℤ)
-        (acc : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) → Option β) :
+noncomputable def signLoopG {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    {β : Type}
+    (sg : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))))
+    (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ)
+    (acc : Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)) → Option β) :
     ℕ → OracleComp (FalconGame.spec aux Falcon.CallP) (Option β)
   | 0 => pure none
   | n + 1 => sg k c >>= fun y => (acc y).elim (signLoopG sg k c acc n) fun b => pure (some b)
+
+theorem UsesGP.signLoopG {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    {β : Type}
+    (sg : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ))))
+    (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ)
+    (acc : Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)) → Option β) :
+    ∀ n, UsesGP logn γf γF σlo hlo Λ sg n (signLoopG sg k c acc n)
+  | 0 => UsesGP.pure 0 none
+  | n + 1 => UsesGP.sign n k c _ fun y => by
+    rcases acc y with _ | b
+    exacts [UsesGP.signLoopG sg k c acc n, UsesGP.pure n _]
 
 theorem UsesG.signLoopG {β : Type} (sg : Key → (Fin (2 ^ 9) → ℤ) →
     OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))))
     (k : Key) (c : Fin (2 ^ 9) → ℤ)
         (acc : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) → Option β) :
-    ∀ n, UsesG sg n (signLoopG sg k c acc n)
-  | 0 => UsesG.pure 0 none
-  | n + 1 => UsesG.sign n k c _ fun y => by
-    rcases acc y with _ | b
-    exacts [UsesG.signLoopG sg k c acc n, UsesG.pure n _]
+    ∀ n, UsesG sg n (signLoopG sg k c acc n) :=
+  UsesGP.signLoopG sg k c acc
 
 theorem Uses64.pathS {ρ : Arith64 εq} (hεq : 0 ≤ εq) (e : ℝ) (he : inp64 εq ≤ e)
     (he1 : 49 * e + 43700 / 2 ^ 40 ≤ 1 / 2 ^ 10) {K : ℕ} {α : Type}

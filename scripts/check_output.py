@@ -2,9 +2,10 @@
 
 usage: python3 scripts/check_output.py <recorded .out> <new output>
 
-Before comparing, the run times printed by the key-check runs (`ms=<n>`, `msCheck=<n>`,
-`msDiag=<n>`) are replaced by `<field>=*` in both files; nothing else is changed. Prints the
-number of differing lines (0 when the outputs agree) and exits with status 1 if it is not 0.
+Before comparing, the run times printed by the key-check, range and SamplerZ-trace runs
+(`ms=<n>`, `msCheck=<n>`, `msDiag=<n>`) are replaced by `<field>=*` in both files; nothing else is
+changed. Prints the number of differing lines (0 when the outputs agree) and exits with status 1
+if it is not 0.
 """
 import difflib
 import re

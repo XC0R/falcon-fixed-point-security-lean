@@ -14,9 +14,10 @@ A ball `CB f` is a computed complex value `c : Cx f` together with a radius `r :
 `CB.Holds b z` says `‖z - c‖ ≤ r` (`none`: no bound, holds for every `z`). Every operation computes
 its centre with the executable operation of `FixedPoint` (the value a signer stores) and its radius
 from the input radii, the computed magnitudes and the per-operation error of `FixedPoint`
-(`Fx.mul_err`, `Fx.div_err`, `Fx.sqrt_err`, …), as a rational rounded up (`up`). The `Holds`
-lemmas say that the radius bounds the distance to the exact result whenever the inputs' radii bound
-theirs; an operation that cannot bound its result (a divisor ball containing `0`) returns `none`.
+(`Fx.mul_err`, `Fx.div_err`, `Fx.sqrt_err`, …), as a rational rounded up (`up`). The `Holds` lemmas
+say that the radius bounds the distance to the exact result whenever the inputs' radii bound theirs;
+an operation that cannot bound its result (for example a divisor ball not contained in `(0, ∞)`)
+returns `none`.
 
 `Out L` vectors: `Out.idx`, `Out.ofIdx` number the positions, `memo` stores a vector in an array
 (`memo_eq`: it is the same function), `allOut` decides a property at every position. -/

@@ -23,7 +23,11 @@ Relations: `RX` (the ball holds a computed value), `RE` (an exact value), `RW τ
 the unbounded value, and the word value equals it when the magnitude of order `τ` is below
 `2^(i-1)`). The reference tree `refTree δq k`: the balls `storeB` (`Exec.KeyExpand`) at ties to
 even, `xn = 32`, node balls widened by `δq`, leaf balls by `1.825·2⁻⁴²` (what `check` at `δq`
-allows). -/
+allows).
+
+`opsBN N`: `opsB` with tables at levels `< N` (`opsB = opsBN 9`); `simXN`, `simEN`, `simWN`,
+`simP1N`: the simulations with tables at levels `< N` (`twOkN · N`), the Falcon-512 ones their
+instances at `N = 9`. Their Falcon-1024 use (`N = 10`) and its reference tree: `Exec.RefVec1024`. -/
 
 @[expose] public section
 
@@ -154,6 +158,14 @@ def twTA : Array (Array (CB 64)) :=
 def twsTA : Array (Array (CB 64)) :=
   (Array.range 9).map fun L => (twsBA .halfEven 64 L).map (·.widen δtw)
 
+/-- The `ζ` tables at levels `< N` (ties to even), widened by `δtw`. -/
+def twTAN (N : ℕ) : Array (Array (CB 64)) :=
+  (Array.range N).map fun L => (twBA .halfEven 64 L).map (·.widen δtw)
+
+/-- The `ζ̄/2` tables at levels `< N` (ties to even), widened by `δtw`. -/
+def twsTAN (N : ℕ) : Array (Array (CB 64)) :=
+  (Array.range N).map fun L => (twsBA .halfEven 64 L).map (·.widen δtw)
+
 /-- The ball arithmetic with the tables `tA` (`ζ`), `sA` (`ζ̄/2`) per level. -/
 def opsBT (tA sA : Array (Array (CB 64))) : VOps MB where
   add x y := let r := x.b.add y.b; .lift2 r x y r.bnd
@@ -170,6 +182,11 @@ def opsBT (tA sA : Array (Array (CB 64))) : VOps MB where
 
 /-- **The ball arithmetic of the vectors.** -/
 def opsB : VOps MB := opsBT twTA twsTA
+
+/-- The ball arithmetic with tables at levels `< N` (Falcon-1024: `N = 10`). -/
+def opsBN (N : ℕ) : VOps MB := opsBT (twTAN N) (twsTAN N)
+
+theorem opsB_eq : opsB = opsBN 9 := rfl
 
 /-- The operations of the executable signer at `C` (`fftW`, `splitW`, `mergeW`, `updW`,
 `targetX`). -/
@@ -296,25 +313,35 @@ theorem CB.norm_le_bnd {f : ℕ} {b : CB f} {z : ℂ} (h : b.Holds z) (hs : b.r.
   have := norm_le_norm_add_norm_sub' z b.c.toC
   linarith [b.c.norm_le_nUB]
 
-/-- The `ζ` table of `opsB` at a level `< 9`. -/
-theorem opsB_tw {L : ℕ} (hL : L < 9) (o : Out L) :
-    (opsB.tw L o).b = (twB .halfEven 64 L o).widen δtw := by
-  have e : twTA.getD L #[] = (twBA .halfEven 64 L).map (·.widen δtw) := by
-    simp [twTA, Array.getD_eq_getD_getElem?, hL]
-  change (twTA.getD L #[]).getD (Out.idx L o) default = _
+/-- The `ζ` table of `opsBN N` at a level `< N`. -/
+theorem opsBN_tw {N L : ℕ} (hL : L < N) (o : Out L) :
+    ((opsBN N).tw L o).b = (twB .halfEven 64 L o).widen δtw := by
+  have e : (twTAN N).getD L #[] = (twBA .halfEven 64 L).map (·.widen δtw) := by
+    simp [twTAN, Array.getD_eq_getD_getElem?, hL]
+  change ((twTAN N).getD L #[]).getD (Out.idx L o) default = _
   rw [e, ← ofArr_twBA]
   simp only [ofArr, Array.getD_eq_getD_getElem?, Array.getElem?_map]
   cases (twBA .halfEven 64 L)[Out.idx L o]? <;> rfl
 
-/-- The `ζ̄/2` table of `opsB` at a level `< 9`. -/
-theorem opsB_tws {L : ℕ} (hL : L < 9) (o : Out L) :
-    (opsB.tws L o).b = (twsB .halfEven 64 L o).widen δtw := by
-  have e : twsTA.getD L #[] = (twsBA .halfEven 64 L).map (·.widen δtw) := by
-    simp [twsTA, Array.getD_eq_getD_getElem?, hL]
-  change (twsTA.getD L #[]).getD (Out.idx L o) default = _
+/-- The `ζ̄/2` table of `opsBN N` at a level `< N`. -/
+theorem opsBN_tws {N L : ℕ} (hL : L < N) (o : Out L) :
+    ((opsBN N).tws L o).b = (twsB .halfEven 64 L o).widen δtw := by
+  have e : (twsTAN N).getD L #[] = (twsBA .halfEven 64 L).map (·.widen δtw) := by
+    simp [twsTAN, Array.getD_eq_getD_getElem?, hL]
+  change ((twsTAN N).getD L #[]).getD (Out.idx L o) default = _
   rw [e, ← ofArr_twsBA]
   simp only [ofArr, Array.getD_eq_getD_getElem?, Array.getElem?_map]
   cases (twsBA .halfEven 64 L)[Out.idx L o]? <;> rfl
+
+/-- The `ζ` table of `opsB` at a level `< 9`. -/
+theorem opsB_tw {L : ℕ} (hL : L < 9) (o : Out L) :
+    (opsB.tw L o).b = (twB .halfEven 64 L o).widen δtw :=
+  opsBN_tw hL o
+
+/-- The `ζ̄/2` table of `opsB` at a level `< 9`. -/
+theorem opsB_tws {L : ℕ} (hL : L < 9) (o : Out L) :
+    (opsB.tws L o).b = (twsB .halfEven 64 L o).widen δtw :=
+  opsBN_tws hL o
 
 theorem wr_none (C : Choices) (hw : C.word = none) (z : Cx 64) : z.wr (wordFn C.word) = z := by
   rw [hw]; rfl
@@ -323,9 +350,10 @@ theorem mulW_none (C : Choices) (hw : C.word = none) (r : RMode) (z u : Cx 64) :
     z.mulW (wordFn C.word) r u = z.mul r u := by
   rw [hw]; rfl
 
-/-- The ball arithmetic holds every unbounded computed run whose tables pass `twOk`. -/
-theorem simX (C : Choices) (hw : C.word = none) (htw : twOk C.x.rc = true) :
-    VSim opsB (opsX C) RX where
+/-- The ball arithmetic with tables at levels `< N` holds every unbounded computed run whose
+tables pass `twOkN · N`. -/
+theorem simXN (N : ℕ) (C : Choices) (hw : C.word = none) (htw : twOkN C.x.rc N = true) :
+    VSimN N (opsBN N) (opsX C) RX where
   add ha hb := by
     change CB.Holds _ (Cx.toC (Cx.wr (wordFn C.word) (Cx.add _ _)))
     rw [wr_none C hw, Cx.toC_add]; exact CB.Holds.add ha hb
@@ -356,20 +384,25 @@ theorem simX (C : Choices) (hw : C.word = none) (htw : twOk C.x.rc = true) :
     change CB.Holds _ (Cx.toC (Cx.ofInt n))
     rw [Cx.toC_ofInt]; exact CB.ofInt_holds n
   tw L o hL := by
-    change CB.Holds (opsB.tw L o).b (twB C.x.rc 64 L o).c.toC
-    rw [opsB_tw hL]
+    change CB.Holds ((opsBN N).tw L o).b (twB C.x.rc 64 L o).c.toC
+    rw [opsBN_tw hL]
     exact (twB_holds .halfEven 64 L o).widen
       (by simp only [δtw, Rat.cast_div, Rat.cast_ofNat, Rat.cast_pow]
-          exact tw_err htw (by omega) o)
+          exact tw_errN htw hL o)
   tws L o hL := by
-    change CB.Holds (opsB.tws L o).b (twsB C.x.rc 64 L o).c.toC
-    rw [opsB_tws hL]
+    change CB.Holds ((opsBN N).tws L o).b (twsB C.x.rc 64 L o).c.toC
+    rw [opsBN_tws hL]
     exact (twsB_holds .halfEven 64 L o).widen
       (by simp only [δtw, Rat.cast_div, Rat.cast_ofNat, Rat.cast_pow]
-          exact tws_err htw (by omega) o)
+          exact tws_errN htw hL o)
 
-/-- The ball arithmetic holds the exact run. -/
-theorem simE : VSim opsB opsE RE where
+/-- The ball arithmetic holds every unbounded computed run whose tables pass `twOk`. -/
+theorem simX (C : Choices) (hw : C.word = none) (htw : twOk C.x.rc = true) :
+    VSim opsB (opsX C) RX :=
+  (simXN 9 C hw htw).toVSim
+
+/-- The ball arithmetic with tables at levels `< N` holds the exact run. -/
+theorem simEN (N : ℕ) : VSimN N (opsBN N) opsE RE where
   add ha hb := CB.Holds.add ha hb
   sub ha hb := CB.Holds.sub ha hb
   neg ha := CB.Holds.neg ha
@@ -380,13 +413,16 @@ theorem simE : VSim opsB opsE RE where
   cst n := CB.ofInt_holds n
   ofInt n := CB.ofInt_holds n
   tw L o hL := by
-    change CB.Holds (opsB.tw L o).b (zeta L o)
-    rw [opsB_tw hL]
+    change CB.Holds ((opsBN N).tw L o).b (zeta L o)
+    rw [opsBN_tw hL]
     exact (twB_holds _ _ L o).widen_self (by norm_num [δtw])
   tws L o hL := by
-    change CB.Holds (opsB.tws L o).b (starRingEnd ℂ (zeta L o) / 2)
-    rw [opsB_tws hL]
+    change CB.Holds ((opsBN N).tws L o).b (starRingEnd ℂ (zeta L o) / 2)
+    rw [opsBN_tws hL]
     exact (twsB_holds _ _ L o).widen_self (by norm_num [δtw])
+
+/-- The ball arithmetic holds the exact run. -/
+theorem simE : VSim opsB opsE RE := (simEN 9).toVSim
 
 theorem MB.m_lift2 (τ : Target) (b : CB 64) (x y : MB) (e : ℚ) :
     MB.m τ (MB.lift2 b x y e) = max (max (MB.m τ x) (MB.m τ y)) e := by
@@ -430,11 +466,12 @@ theorem wr_of_bnd {i : ℕ} (hi : 1 ≤ i) {B : MB} {z : Cx 64} (hh : B.b.Holds 
     (hs : B.b.r.isSome = true) (hm : B.b.bnd < 2 ^ (i - 1)) : z.wr (wordFn (some i)) = z :=
   Cx.wr_some hi ((CB.norm_le_bnd hh hs).trans_lt (by exact_mod_cast hm))
 
-/-- Words: the ball arithmetic holds the unbounded run, and reductions to `(i + 64)`-bit words
-change nothing below the magnitude bound. -/
-theorem simW (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i) (htw : twOk C.x.rc = true) :
-    VSim opsB (opsP C { C with word := none }) (RW C.target i) := by
-  have hX := simX { C with word := none } rfl htw
+/-- Words, tables at levels `< N`: the ball arithmetic holds the unbounded run, and reductions to
+`(i + 64)`-bit words change nothing below the magnitude bound. -/
+theorem simWN (N : ℕ) (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i)
+    (htw : twOkN C.x.rc N = true) :
+    VSimN N (opsBN N) (opsP C { C with word := none }) (RW C.target i) := by
+  have hX := simXN N { C with word := none } rfl htw
   refine ⟨fun {a b x y} ha hb => ⟨hX.add ha.1 hb.1, fun hs hm => ?_⟩,
     fun {a b x y} ha hb => ⟨hX.sub ha.1 hb.1, fun hs hm => ?_⟩,
     fun {a x} ha => ⟨hX.neg ha.1, fun hs hm => ?_⟩,
@@ -448,23 +485,23 @@ theorem simW (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i) (htw 
     rw [MB.m_lift2, max_lt_iff, max_lt_iff] at hm
     change (Cx.add x.1 y.1).wr (wordFn C.word) = (Cx.add x.2 y.2).wr (wordFn none)
     rw [ha.2 sa hm.1.1, hb.2 sb hm.1.2, hw]
-    exact wr_of_bnd hi (B := opsB.add a b) (hX.add ha.1 hb.1) hs hm.2
+    exact wr_of_bnd hi (B := (opsBN N).add a b) (hX.add ha.1 hb.1) hs hm.2
   · obtain ⟨sa, sb⟩ := CB.sub_isSome hs
     change MB.m _ (MB.lift2 _ a b _) < _ at hm
     rw [MB.m_lift2, max_lt_iff, max_lt_iff] at hm
     change (Cx.sub x.1 y.1).wr (wordFn C.word) = (Cx.sub x.2 y.2).wr (wordFn none)
     rw [ha.2 sa hm.1.1, hb.2 sb hm.1.2, hw]
-    exact wr_of_bnd hi (B := opsB.sub a b) (hX.sub ha.1 hb.1) hs hm.2
+    exact wr_of_bnd hi (B := (opsBN N).sub a b) (hX.sub ha.1 hb.1) hs hm.2
   · change MB.m _ (MB.lift1 _ a _) < _ at hm
     rw [MB.m_lift1, max_lt_iff] at hm
     change (Cx.neg x.1).wr (wordFn C.word) = (Cx.neg x.2).wr (wordFn none)
     rw [ha.2 hs hm.1, hw]
-    exact wr_of_bnd hi (B := opsB.neg a) (hX.neg ha.1) hs hm.2
+    exact wr_of_bnd hi (B := (opsBN N).neg a) (hX.neg ha.1) hs hm.2
   · change MB.m _ (MB.lift1 _ a _) < _ at hm
     rw [MB.m_lift1, max_lt_iff] at hm
     change (Cx.half C.x.rm x.1).wr (wordFn C.word) = (Cx.half C.x.rm x.2).wr (wordFn none)
     rw [ha.2 (CB.half_isSome hs) hm.1, hw]
-    exact wr_of_bnd hi (B := opsB.half a) (hX.half ha.1) hs hm.2
+    exact wr_of_bnd hi (B := (opsBN N).half a) (hX.half ha.1) hs hm.2
   · obtain ⟨sa, sb⟩ := CB.mul_isSome hs
     change MB.m _ (MB.lift2 _ a b _) < _ at hm
     rw [MB.m_lift2, max_lt_iff, max_lt_iff, max_lt_iff] at hm
@@ -483,12 +520,18 @@ theorem simW (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i) (htw 
     change (divqX C.x.rm C.qinv x.1).wr (wordFn C.word) =
       (divqX C.x.rm C.qinv x.2).wr (wordFn none)
     rw [ha.2 (CB.divq_isSome hs) hm.1, hw]
-    exact wr_of_bnd hi (B := opsB.divq a) (hX.divq ha.1) hs hm.2
+    exact wr_of_bnd hi (B := (opsBN N).divq a) (hX.divq ha.1) hs hm.2
   · change MB.m _ ⟨_, |(n : ℚ)|, |(n : ℚ)|⟩ < _ at hm
     rw [MB.m_mk] at hm
     change (Cx.ofInt n : Cx 64).wr (wordFn C.word) = (Cx.ofInt n : Cx 64).wr (wordFn none)
     rw [hw]
     exact Cx.wr_some hi (by rw [Cx.toC_ofInt, Complex.norm_intCast]; exact_mod_cast hm)
+
+/-- Words: the ball arithmetic holds the unbounded run, and reductions to `(i + 64)`-bit words
+change nothing below the magnitude bound. -/
+theorem simW (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i) (htw : twOk C.x.rc = true) :
+    VSim opsB (opsP C { C with word := none }) (RW C.target i) :=
+  (simWN 9 C hi hw htw).toVSim
 
 theorem GTree.Rel.map_right {V W W' : Type} {R : V → W → Prop} {R' : V → W' → Prop}
     (g : W → W') (hg : ∀ a x, R a x → R' a (g x)) :
@@ -497,7 +540,7 @@ theorem GTree.Rel.map_right {V W W' : Type} {R : V → W → Prop} {R' : V → W
   | _, .node _ A0 A1, .node _ B0 B1, h =>
     ⟨fun o => hg _ _ (h.1 o), map_right g hg A0 B0 h.2.1, map_right g hg A1 B1 h.2.2⟩
 
-theorem simP1 (C C' : Choices) : VSim (opsP C C') (opsX C) fun p x => p.1 = x where
+theorem simP1N (N : ℕ) (C C' : Choices) : VSimN N (opsP C C') (opsX C) fun p x => p.1 = x where
   add h1 h2 := by subst h1 h2; rfl
   sub h1 h2 := by subst h1 h2; rfl
   neg h := by subst h; rfl
@@ -508,6 +551,9 @@ theorem simP1 (C C' : Choices) : VSim (opsP C C') (opsX C) fun p x => p.1 = x wh
   ofInt _ := rfl
   tw _ _ _ := rfl
   tws _ _ _ := rfl
+
+theorem simP1 (C C' : Choices) : VSim (opsP C C') (opsX C) fun p x => p.1 = x :=
+  (simP1N 9 C C').toVSim
 
 /-- A widened ball tree holding `U` holds every ball tree holding `U` whose radii pass
 `radOkB δq`, at its centres. -/

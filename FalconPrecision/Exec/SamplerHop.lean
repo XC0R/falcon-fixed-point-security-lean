@@ -13,11 +13,19 @@ public import Mathlib.Probability.Distributions.Uniform
 /-! # The executable signer with the executable SamplerZ against exact Falcon
 
 `SampKey`: raw keys passing `check` whose stored leaves are in SamplerZ's range `[σmin, σmax]`
-(`leavesB`; `check` admits `[1.2778, 1.825]`). `specKS`, `execImplS`: experiments on such keys
+(`leavesB`; the bounds of `check`'s leaf test, so every key passing `check` is one:
+`sampKeyEquiv`, `Exec.SampKeyCheck`). `specKS`, `execImplS`: experiments on such keys
 and the executable signer's world with a sampler `samp`. `execZ` factors that world through a
 SamplerZ oracle `specZ` (`exec_factor`), so the sampler can be swapped per call:
 `sampler_hop` (Rényi, order `a`, path budget `N` calls, `samplerZ_mgf`) and, without shift
 rejection, `samplerZ_tv` along executions.
+
+The query layer and the hop are also stated for the range of any `P : SampParams` (`SQP`,
+`specZP`, `implZP`, `sampQP`, `simulateQ_ffsXP`, `pathSum_ffsXP`; `implZ_eq`) and for
+`sampS sm`, `SminOk sm` (`sampler_hopP`; Falcon-1024: `sampler_hop1024`); `thresh_samplerE` is the
+threshold step for every `θ ≥ 2⁻ᵉ`, `e < 256`, and `N ≤ 2⁴⁶·(256 - e)` calls, with the instances
+`thresh_sampler` (Falcon-512), `thresh_sampler1024` (`2048K` calls, `K ≤ 2²⁹`,
+`θ = T·2⁻¹²⁶ + 2⁻²⁸⁰`) and `thresh_sampler1024_256` (`θ = T·2⁻²⁵⁴ + 2⁻²⁸⁰`).
 
 `falcon512_exec_sampler_vs_true`: `falcon512_exec_vs_true` (`Exec.SignRefine`) for the executable
 signer running `samplerZ falcon512S C.samp ub` on uniform bits `ub`, for every SamplerZ choice; the
@@ -29,7 +37,9 @@ ideal worlds (`hE`, `hM`, `hF`, the ideal sampler `sampI` with `hI`, `hsamp`);
 
 Not proved here: what `falcon512_exec_vs_true` does not prove; the PRNG (`ub` is ideal); the
 unbounded loop (`fuel = 128`); SamplerZ's floating/fixed-point arithmetic (`x`, `ccs`, `r` exact in
-`ℚ`); NIST's 79-bit table (`tab79` is ours). -/
+`ℚ`); NIST's 79-bit table (`tab79` is ours). `SampKey`, `execZ`, `exec_factor`, `pathSum_execZ`
+are stated at Falcon-512; their Falcon-1024 analogues and the composed theorems there are
+`Exec.SamplerHop1024`. -/
 
 @[expose] public section
 
@@ -77,6 +87,25 @@ def execImplS (C : Choices) (δq : ℕ → ℚ) {m : Type → Type*} [Monad m] (
   | .inl x => implA x
   | .inr kc => signX C samp (storeC C.x C.xn kc.1.1.1) kc.1.1.1 kc.2
 
+/-- SamplerZ queries `(σ̄, t̄)` with `σ̄` in the range of `P`. -/
+def SQP (P : SampParams) : Type := {p : Fx 64 × Fx 64 // inRangeB P p.1 = true}
+
+/-- Auxiliary oracles and a SamplerZ oracle on the range of `P`. -/
+@[reducible] def specZP (P : SampParams) (aux : OracleSpec.{0, 0} ιA) : OracleSpec (ιA ⊕ SQP P) :=
+  FalconGame.spec aux (SQP P)
+
+/-- A world of `specZP P`: auxiliary queries by `implA`, SamplerZ by `samp`. -/
+def implZP (P : SampParams) {m : Type → Type*} (implA : QueryImpl aux m)
+    (samp : Fx 64 → Fx 64 → m ℤ) : QueryImpl (specZP P aux) m
+  | .inl x => implA x
+  | .inr p => samp p.1.1 p.1.2
+
+/-- A SamplerZ call as a query on the range of `P` (`0` out of range). -/
+def sampQP (P : SampParams) (σ t : Fx 64) : OracleComp (specZP P aux) ℤ :=
+  if h : inRangeB P σ = true then
+    liftM (OracleSpec.query (spec := specZP P aux) (.inr ⟨(σ, t), h⟩))
+  else pure 0
+
 /-- SamplerZ queries `(σ̄, t̄)` with `σ̄` in range. -/
 def SQ : Type := {p : Fx 64 × Fx 64 // inRangeB falcon512S p.1 = true}
 
@@ -102,20 +131,23 @@ def execZ (C : Choices) (δq : ℕ → ℚ) :
   | .inl x => liftM (OracleSpec.query (spec := specZ aux) (.inl x))
   | .inr kc => signX C sampQ (storeC C.x C.xn kc.1.1.1) kc.1.1.1 kc.2
 
-theorem simulateQ_sampQ {m : Type → Type*} [Monad m] [LawfulMonad m] (implA : QueryImpl aux m)
-    (samp : Fx 64 → Fx 64 → m ℤ) {σ : Fx 64} (h : inRangeB falcon512S σ = true) (t : Fx 64) :
-    simulateQ (implZ implA samp) (sampQ (aux := aux) σ t) = samp σ t := by
-  rw [sampQ, dite_eq_left_of_eq_true (eq_true h)]
-  exact simulateQ_spec_query (impl := implZ implA samp) (Sum.inr ⟨(σ, t), h⟩)
+theorem simulateQ_sampQP (P : SampParams) {m : Type → Type*} [Monad m] [LawfulMonad m]
+    (implA : QueryImpl aux m) (samp : Fx 64 → Fx 64 → m ℤ) {σ : Fx 64} (h : inRangeB P σ = true)
+    (t : Fx 64) :
+    simulateQ (implZP P implA samp) (sampQP P (aux := aux) σ t) = samp σ t := by
+  rw [sampQP, dite_eq_left_of_eq_true (eq_true h)]
+  exact simulateQ_spec_query (impl := implZP P implA samp) (Sum.inr ⟨(σ, t), h⟩)
 
-/-- On a tree with leaves in range, `ffsX` with SamplerZ queries, run in `implZ`, is `ffsX`. -/
-theorem simulateQ_ffsX (C : Choices) {m : Type → Type*} [Monad m] [LawfulMonad m]
-    (implA : QueryImpl aux m) (samp : Fx 64 → Fx 64 → m ℤ) :
-    ∀ {L : ℕ} (T : CTree 64 L), T.leavesB (inRangeB falcon512S) = true →
+/-- On a tree with leaves in the range of `P`, `ffsX` with SamplerZ queries, run in `implZP P`,
+is `ffsX`. -/
+theorem simulateQ_ffsXP (P : SampParams) (C : Choices) {m : Type → Type*} [Monad m]
+    [LawfulMonad m] (implA : QueryImpl aux m) (samp : Fx 64 → Fx 64 → m ℤ) :
+    ∀ {L : ℕ} (T : CTree 64 L), T.leavesB (inRangeB P) = true →
       ∀ t0 t1 : Out L → Cx 64,
-        simulateQ (implZ implA samp) (ffsX C (sampQ (aux := aux)) T t0 t1) = ffsX C samp T t0 t1
+        simulateQ (implZP P implA samp) (ffsX C (sampQP P (aux := aux)) T t0 t1) =
+          ffsX C samp T t0 t1
   | _, .leaf σ, hT, t0, t1 => by
-    simp only [ffsX, simulateQ_bind, simulateQ_pure, simulateQ_sampQ implA samp hT]
+    simp only [ffsX, simulateQ_bind, simulateQ_pure, simulateQ_sampQP P implA samp hT]
   | _, @CTree.node _ L ℓ T0 T1, hT, t0, t1 => by
     simp only [CTree.leavesB, Bool.and_eq_true] at hT
     simp only [ffsX]
@@ -123,7 +155,7 @@ theorem simulateQ_ffsX (C : Choices) {m : Type → Type*} [Monad m] [LawfulMonad
     swap
     · simp only [c1, Bool.false_eq_true, ↓reduceIte, simulateQ_pure]
     simp only [c1, ↓reduceIte]
-    rw [simulateQ_bind, simulateQ_ffsX C implA samp T1 hT.2]
+    rw [simulateQ_bind, simulateQ_ffsXP P C implA samp T1 hT.2]
     refine bind_congr fun r1 => ?_
     rcases r1 with _ | s1
     · rfl
@@ -132,12 +164,30 @@ theorem simulateQ_ffsX (C : Choices) {m : Type → Type*} [Monad m] [LawfulMonad
     swap
     · simp only [c2, Bool.false_eq_true, ↓reduceIte, simulateQ_pure]
     simp only [c2, ↓reduceIte]
-    rw [simulateQ_bind, simulateQ_ffsX C implA samp T0 hT.1]
+    rw [simulateQ_bind, simulateQ_ffsXP P C implA samp T0 hT.1]
     refine bind_congr fun r0 => ?_
     rcases r0 with _ | s0
     · rfl
     by_cases c3 : chkX C.rchk L s0.c1 = true <;>
       simp only [c3, Bool.false_eq_true, ↓reduceIte, simulateQ_pure]
+
+theorem implZ_eq {m : Type → Type*} (implA : QueryImpl aux m) (samp : Fx 64 → Fx 64 → m ℤ) :
+    implZ implA samp = implZP falcon512S implA samp := by
+  funext t; rcases t with _ | _ <;> rfl
+
+theorem simulateQ_sampQ {m : Type → Type*} [Monad m] [LawfulMonad m] (implA : QueryImpl aux m)
+    (samp : Fx 64 → Fx 64 → m ℤ) {σ : Fx 64} (h : inRangeB falcon512S σ = true) (t : Fx 64) :
+    simulateQ (implZ implA samp) (sampQ (aux := aux) σ t) = samp σ t := by
+  rw [implZ_eq]; exact simulateQ_sampQP falcon512S implA samp h t
+
+/-- On a tree with leaves in range, `ffsX` with SamplerZ queries, run in `implZ`, is `ffsX`. -/
+theorem simulateQ_ffsX (C : Choices) {m : Type → Type*} [Monad m] [LawfulMonad m]
+    (implA : QueryImpl aux m) (samp : Fx 64 → Fx 64 → m ℤ) :
+    ∀ {L : ℕ} (T : CTree 64 L), T.leavesB (inRangeB falcon512S) = true →
+      ∀ t0 t1 : Out L → Cx 64,
+        simulateQ (implZ implA samp) (ffsX C (sampQ (aux := aux)) T t0 t1) =
+          ffsX C samp T t0 t1 := by
+  rw [implZ_eq]; exact simulateQ_ffsXP falcon512S C implA samp
 
 /-- **Node.** The executable world factors through the SamplerZ oracle. -/
 theorem exec_factor (C : Choices) (δq : ℕ → ℚ) {m : Type → Type*} [Monad m] [LawfulMonad m]
@@ -176,37 +226,48 @@ theorem pathSum_embedS (P : XChoices) (n : ℕ) (δq : ℕ → ℚ) {α : Type}
     (fun t => by rcases t with x | kc <;> exact pathSum_query _ (by simp [wKC, wKS])) h
   rwa [one_mul] at h1
 
-theorem pathSum_sampQ (σ t : Fx 64) :
-    PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (sampQ (aux := aux) σ t) 1 := by
-  unfold sampQ
+theorem pathSum_sampQP (P : SampParams) (σ t : Fx 64) :
+    PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (sampQP P (aux := aux) σ t) 1 := by
+  unfold sampQP
   split
   · exact pathSum_query _ (by change (0 : ℝ) ≤ 1 - 1; norm_num)
   · exact .pure _ zero_le_one
 
 /-- `ffsX` on a tree of depth `L` makes at most `2^(L+1)` SamplerZ calls. -/
-theorem pathSum_ffsX (C : Choices) :
+theorem pathSum_ffsXP (P : SampParams) (C : Choices) :
     ∀ {L : ℕ} (T : CTree 64 L) (t0 t1 : Out L → Cx 64),
-      PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (ffsX C (sampQ (aux := aux)) T t0 t1)
+      PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (ffsX C (sampQP P (aux := aux)) T t0 t1)
         (2 ^ (L + 1))
   | _, .leaf σ, t0, t1 =>
-    ((pathSum_sampQ _ _).bind (T := 1) fun _ => ((pathSum_sampQ _ _).bind (T := 0)
+    ((pathSum_sampQP P _ _).bind (T := 1) fun _ => ((pathSum_sampQP P _ _).bind (T := 0)
       fun _ => .pure _ le_rfl).weaken (by norm_num)).weaken (by norm_num)
   | _, @CTree.node _ L ℓ T0 T1, t0, t1 => by
     simp only [ffsX]
     split
-    · refine ((pathSum_ffsX C T1 _ _).bind (T := 2 ^ (L + 1)) fun r1 => ?_).weaken
+    · refine ((pathSum_ffsXP P C T1 _ _).bind (T := 2 ^ (L + 1)) fun r1 => ?_).weaken
         (le_of_eq (by ring))
       rcases r1 with _ | s1
       · exact .pure _ (by positivity)
       · dsimp only
         split
-        · refine ((pathSum_ffsX C T0 _ _).bind (T := 0) fun r0 => ?_).weaken (by simp)
+        · refine ((pathSum_ffsXP P C T0 _ _).bind (T := 0) fun r0 => ?_).weaken (by simp)
           rcases r0 with _ | s0
           · exact .pure _ le_rfl
           · dsimp only
             split <;> exact .pure _ le_rfl
         · exact .pure _ (by positivity)
     · exact .pure _ (by positivity)
+
+theorem pathSum_sampQ (σ t : Fx 64) :
+    PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (sampQ (aux := aux) σ t) 1 :=
+  pathSum_sampQP falcon512S σ t
+
+/-- `ffsX` on a tree of depth `L` makes at most `2^(L+1)` SamplerZ calls. -/
+theorem pathSum_ffsX (C : Choices) :
+    ∀ {L : ℕ} (T : CTree 64 L) (t0 t1 : Out L → Cx 64),
+      PathSum (Sum.elim (fun _ => (0 : ℝ)) fun _ => 1) (ffsX C (sampQ (aux := aux)) T t0 t1)
+        (2 ^ (L + 1)) :=
+  pathSum_ffsXP falcon512S C
 
 /-- **Node.** A signing attempt makes at most `1024` SamplerZ calls. -/
 theorem pathSum_execZ (C : Choices) (δq : ℕ → ℚ) {α : Type}
@@ -226,6 +287,45 @@ section Hop
 variable [hA : ∀ t, Countable (aux t)] {m : Type → Type*} [Monad m] [LawfulMonad m]
   [EvalDistSemantics m] [LawfulEvalDistSemantics m]
 
+/-- **The sampler hop** for `sampS sm` (`SminOk sm`; Rényi, order `a ≥ 2`): along executions
+with at most `N` SamplerZ calls, SamplerZ with shift rejection against an ideal sampler `sampI`. -/
+theorem sampler_hopP {sm : ℚ} (hsm : SminOk sm) {a : ℝ} (ha : 2 ≤ a) (S : SampChoices)
+    (hS : S.shiftRej = true)
+    (implA : QueryImpl aux m) (ub : ℕ → m ℕ) (hub : UnifBits ub) (sampI : Fx 64 → Fx 64 → m ℤ)
+    (hI : ∀ σ t, inRangeB (sampS sm) σ = true →
+      𝒟[sampI σ t] = discreteGaussianMeasure σ.toReal t.toReal)
+    {α : Type} [MeasurableSpace α] [Countable α] [MeasurableSingletonClass α]
+    (oz : OracleComp (specZP (sampS sm) aux) α) {N : ℝ}
+    (hN : PathSum (Sum.elim (fun _ => 0) fun _ => 1) oz N)
+    {s : Set α} (hs : MeasurableSet s) :
+    𝒟[simulateQ (implZP (sampS sm) implA (samplerZ (sampS sm) S ub)) oz] s ^ (a / (a - 1)) /
+        ENNReal.ofReal (Real.exp (N * εZ a)) ≤
+      𝒟[simulateQ (implZP (sampS sm) implA sampI) oz] s := by
+  have ha1 : 1 < a := by linarith
+  have hε : 0 ≤ εZ a := by
+    have hu : (0 : ℝ) ≤ uB := by norm_num [uB]
+    exact mul_nonneg (mul_nonneg (by linarith) (Real.rpow_nonneg hu _)) (by norm_num [chi2B])
+  have hM := renyiMGF_simulateQ_le_path ha1 (implZP (sampS sm) implA (samplerZ (sampS sm) S ub))
+    (implZP (sampS sm) implA sampI) (c := (a - 1) * εZ a) (mul_nonneg (by linarith) hε) _
+    (fun x => by
+      cases x with
+      | inl x => exact FalconGame.aux_le ha1 implA _ _ (fun _ => rfl) (fun _ => rfl) _ _ x
+      | inr p =>
+        refine le_of_le_of_eq ?_ (by rw [Sum.elim_inr, mul_one])
+        change renyiMGF a 𝒟[samplerZ (sampS sm) S ub p.1.1 p.1.2] 𝒟[sampI p.1.1 p.1.2] ≤ _
+        rw [hI _ _ p.2]
+        exact samplerZ_mgfP hsm ha S hS ub hub _ _ p.2) hN
+  refine le_trans ?_ (measure_rpow_div_renyiDiv_le ha1
+    𝒟[simulateQ (implZP (sampS sm) implA (samplerZ (sampS sm) S ub)) oz]
+    𝒟[simulateQ (implZP (sampS sm) implA sampI) oz] hs)
+  refine ENNReal.div_le_div_left ?_ _
+  rw [renyiDiv_eq_rpow ha1]
+  refine (ENNReal.rpow_le_rpow hM (inv_nonneg.2 (by linarith))).trans_eq ?_
+  rw [ENNReal.ofReal_rpow_of_pos (Real.exp_pos _), ← Real.exp_mul]
+  have ham : a - 1 ≠ 0 := by linarith
+  congr 2
+  field_simp
+
 /-- **The sampler hop** (Rényi, order `a ≥ 2`): along executions with at most `N` SamplerZ
 calls, SamplerZ with shift rejection against an ideal sampler `sampI`. -/
 theorem sampler_hop {a : ℝ} (ha : 2 ≤ a) (S : SampChoices) (hS : S.shiftRej = true)
@@ -238,39 +338,32 @@ theorem sampler_hop {a : ℝ} (ha : 2 ≤ a) (S : SampChoices) (hS : S.shiftRej 
     𝒟[simulateQ (implZ implA (samplerZ falcon512S S ub)) oz] s ^ (a / (a - 1)) /
         ENNReal.ofReal (Real.exp (N * εZ a)) ≤
       𝒟[simulateQ (implZ implA sampI) oz] s := by
-  have ha1 : 1 < a := by linarith
-  have hε : 0 ≤ εZ a := by
-    have hu : (0 : ℝ) ≤ uB := by norm_num [uB]
-    exact mul_nonneg (mul_nonneg (by linarith) (Real.rpow_nonneg hu _)) (by norm_num [chi2B])
-  have hM := renyiMGF_simulateQ_le_path ha1 (implZ implA (samplerZ falcon512S S ub))
-    (implZ implA sampI) (c := (a - 1) * εZ a) (mul_nonneg (by linarith) hε) _ (fun x => by
-      cases x with
-      | inl x => exact FalconGame.aux_le ha1 implA _ _ (fun _ => rfl) (fun _ => rfl) _ _ x
-      | inr p =>
-        refine le_of_le_of_eq ?_ (by rw [Sum.elim_inr, mul_one])
-        change renyiMGF a 𝒟[samplerZ falcon512S S ub p.1.1 p.1.2] 𝒟[sampI p.1.1 p.1.2] ≤ _
-        rw [hI _ _ p.2]
-        exact samplerZ_mgf ha S hS ub hub _ _ p.2) hN
-  refine le_trans ?_ (measure_rpow_div_renyiDiv_le ha1
-    𝒟[simulateQ (implZ implA (samplerZ falcon512S S ub)) oz] 𝒟[simulateQ (implZ implA sampI) oz] hs)
-  refine ENNReal.div_le_div_left ?_ _
-  rw [renyiDiv_eq_rpow ha1]
-  refine (ENNReal.rpow_le_rpow hM (inv_nonneg.2 (by linarith))).trans_eq ?_
-  rw [ENNReal.ofReal_rpow_of_pos (Real.exp_pos _), ← Real.exp_mul]
-  have ham : a - 1 ≠ 0 := by linarith
-  congr 2
-  field_simp
+  rw [implZ_eq, implZ_eq]; exact sampler_hopP sminOk512 ha S hS implA ub hub sampI hI oz hN hs
 
-/-- **Node** (arithmetic): with `R_{2¹⁴} ≤ exp(1024K·εZ)` along executions, `K ≤ 2³⁹`,
-success `> 2^(1/64)·θ` before the hop is success `> θ` after it, `θ = T·2⁻¹²⁶ + 2⁻¹⁴⁰`. -/
-theorem thresh_sampler (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^ 39) (x y : ℝ≥0∞)
+/-- **The sampler hop at Falcon-1024** (`falcon1024S`; Rényi, order `a ≥ 2`): along executions
+with at most `N` SamplerZ calls, SamplerZ with shift rejection against an ideal sampler `sampI`. -/
+theorem sampler_hop1024 {a : ℝ} (ha : 2 ≤ a) (S : SampChoices) (hS : S.shiftRej = true)
+    (implA : QueryImpl aux m) (ub : ℕ → m ℕ) (hub : UnifBits ub) (sampI : Fx 64 → Fx 64 → m ℤ)
+    (hI : ∀ σ t, inRangeB falcon1024S σ = true →
+      𝒟[sampI σ t] = discreteGaussianMeasure σ.toReal t.toReal)
+    {α : Type} [MeasurableSpace α] [Countable α] [MeasurableSingletonClass α]
+    (oz : OracleComp (specZP falcon1024S aux) α) {N : ℝ}
+    (hN : PathSum (Sum.elim (fun _ => 0) fun _ => 1) oz N)
+    {s : Set α} (hs : MeasurableSet s) :
+    𝒟[simulateQ (implZP falcon1024S implA (samplerZ falcon1024S S ub)) oz] s ^ (a / (a - 1)) /
+        ENNReal.ofReal (Real.exp (N * εZ a)) ≤
+      𝒟[simulateQ (implZP falcon1024S implA sampI) oz] s :=
+  sampler_hopP sminOk1024 ha S hS implA ub hub sampI hI oz hN hs
+
+/-- **Node** (arithmetic): with `R_{2¹⁴} ≤ exp(N·εZ)` along executions, `N ≤ 2⁴⁶·(256 - e)`,
+success `> 2^(1/64)·θ` before the hop is success `> θ` after it, for every `θ ≥ 2⁻ᵉ`, `e < 256`. -/
+theorem thresh_samplerE (θ : ℝ≥0∞) (e : ℕ) (he : e < 256) (hθ : (2 : ℝ≥0∞) ^ (-(e : ℝ)) ≤ θ)
+    (N : ℝ) (hN : N ≤ 2 ^ 46 * (256 - e)) (x y : ℝ≥0∞)
     (hxy : x ^ ((2 : ℝ) ^ 14 / ((2 : ℝ) ^ 14 - 1)) /
-      ENNReal.ofReal (Real.exp (1024 * K * εZ (2 ^ 14))) ≤ y)
-    (hx : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) * (T * 2 ^ (-(126 : ℝ)) + 2 ^ (-(140 : ℝ))) < x) :
-    T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) + 2 ^ (-(140 : ℝ)) < y := by
-  set θ := T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) + 2 ^ (-(140 : ℝ)) with hθ
+      ENNReal.ofReal (Real.exp (N * εZ (2 ^ 14))) ≤ y)
+    (hx : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) * θ < x) : θ < y := by
   set p : ℝ := (2 : ℝ) ^ 14 / ((2 : ℝ) ^ 14 - 1) with hp
-  set c : ℝ := 1024 * K * εZ (2 ^ 14) with hc
+  set c : ℝ := N * εZ (2 ^ 14) with hc
   have hp' : p = 1 / 16383 + 1 := by rw [hp]; norm_num
   have h2 : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) = ENNReal.ofReal (2 ^ (1 / 64 : ℝ)) := by
     rw [← ENNReal.ofReal_rpow_of_pos two_pos, ENNReal.ofReal_ofNat]
@@ -278,11 +371,9 @@ theorem thresh_sampler (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^
     intro h
     rw [h, ENNReal.mul_top (ENNReal.rpow_pos (by norm_num) (by norm_num)).ne'] at hx
     exact not_top_lt hx
-  have h126 : (2 : ℝ≥0∞) ^ (-(126 : ℝ)) ≤ θ :=
-    le_add_right (le_mul_of_one_le_left (by positivity) hT)
   set θr := θ.toReal
-  have hθr : (2 : ℝ) ^ (-(126 : ℝ)) ≤ θr := by
-    have := ENNReal.toReal_mono hθt h126
+  have hθr : (2 : ℝ) ^ (-(e : ℝ)) ≤ θr := by
+    have := ENNReal.toReal_mono hθt hθ
     rwa [← ENNReal.toReal_rpow, ENNReal.toReal_ofNat] at this
   have hθ0 : 0 < θr := lt_of_lt_of_le (by positivity) hθr
   have hε0 : 0 ≤ εZ (2 ^ 14) :=
@@ -303,19 +394,23 @@ theorem thresh_sampler (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^
     calc εZ (2 ^ 14) ≤ (2 : ℝ) ^ 14 / 2 * 3 * (chi2B : ℝ) := by
           rw [εZ]; gcongr; norm_num [chi2B]
       _ = 3 / 2 ^ 63 := by norm_num [chi2B]
-  have hc3 : c ≤ 3 / 2 ^ 14 := by
-    have hK' : (K : ℝ) ≤ 2 ^ 39 := by exact_mod_cast hK
-    calc c ≤ 1024 * 2 ^ 39 * (3 / 2 ^ 63) := by rw [hc]; gcongr
-      _ = 3 / 2 ^ 14 := by norm_num
-  have hlow : Real.exp c < 2 ^ (130 / 16383 : ℝ) := by
-    rw [Real.rpow_def_of_pos two_pos, Real.exp_lt_exp]
-    linarith [Real.log_two_gt_d9]
+  have he' : (0 : ℝ) < 256 - e := by
+    have : (e : ℝ) < 256 := by exact_mod_cast he
+    linarith
+  have hc3 : c ≤ 3 * (256 - e) / 2 ^ 17 := by
+    calc c ≤ 2 ^ 46 * (256 - e) * (3 / 2 ^ 63) := by
+          rw [hc]; exact mul_le_mul hN hε hε0 (by positivity)
+      _ = 3 * (256 - e) / 2 ^ 17 := by ring
+  have hlow : Real.exp c < 2 ^ ((256 - e) / 16383 : ℝ) := by
+    rw [Real.rpow_def_of_pos two_pos, Real.exp_lt_exp,
+      show Real.log 2 * ((256 - e) / 16383) = Real.log 2 * (256 - e) / 16383 by ring]
+    linarith [mul_lt_mul_of_pos_right Real.log_two_gt_d9 he']
   have key : θr * Real.exp c < (2 ^ (1 / 64 : ℝ) * θr) ^ p := by
-    calc θr * Real.exp c < θr * 2 ^ (130 / 16383 : ℝ) := mul_lt_mul_of_pos_left hlow hθ0
-      _ = 2 ^ (1 / 64 * p + -(126 : ℝ) * (1 / 16383)) * θr := by
-          rw [show 1 / 64 * p + -(126 : ℝ) * (1 / 16383) = 130 / 16383 by rw [hp']; norm_num]
+    calc θr * Real.exp c < θr * 2 ^ ((256 - e) / 16383 : ℝ) := mul_lt_mul_of_pos_left hlow hθ0
+      _ = 2 ^ (1 / 64 * p + -(e : ℝ) * (1 / 16383)) * θr := by
+          rw [show 1 / 64 * p + -(e : ℝ) * (1 / 16383) = (256 - e) / 16383 by rw [hp']; ring]
           ring
-      _ = 2 ^ (1 / 64 * p) * (2 ^ (-(126 : ℝ))) ^ (1 / 16383 : ℝ) * θr := by
+      _ = 2 ^ (1 / 64 * p) * (2 ^ (-(e : ℝ))) ^ (1 / 16383 : ℝ) * θr := by
           rw [← Real.rpow_mul two_pos.le, ← Real.rpow_add two_pos]
       _ ≤ 2 ^ (1 / 64 * p) * θr ^ (1 / 16383 : ℝ) * θr := by gcongr
       _ = (2 ^ (1 / 64 : ℝ) * θr) ^ p := by
@@ -337,6 +432,44 @@ theorem thresh_sampler (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^
   exact ((ENNReal.lt_div_iff_mul_lt (Or.inl (ENNReal.ofReal_pos.2 (Real.exp_pos _)).ne')
     (Or.inl ENNReal.ofReal_ne_top)).2 hE).trans_le hxy
 
+/-- **Node** (arithmetic): with `R_{2¹⁴} ≤ exp(1024K·εZ)` along executions, `K ≤ 2³⁹`,
+success `> 2^(1/64)·θ` before the hop is success `> θ` after it, `θ = T·2⁻¹²⁶ + 2⁻¹⁴⁰`. -/
+theorem thresh_sampler (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^ 39) (x y : ℝ≥0∞)
+    (hxy : x ^ ((2 : ℝ) ^ 14 / ((2 : ℝ) ^ 14 - 1)) /
+      ENNReal.ofReal (Real.exp (1024 * K * εZ (2 ^ 14))) ≤ y)
+    (hx : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) * (T * 2 ^ (-(126 : ℝ)) + 2 ^ (-(140 : ℝ))) < x) :
+    T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) + 2 ^ (-(140 : ℝ)) < y :=
+  thresh_samplerE _ 126 (by norm_num)
+    (by rw [Nat.cast_ofNat]; exact le_add_right (le_mul_of_one_le_left (by positivity) hT))
+    _ (by have : (K : ℝ) ≤ 2 ^ 39 := by exact_mod_cast hK
+          push_cast; linarith) x y hxy hx
+
+/-- **Node** (arithmetic) at Falcon-1024: with `R_{2¹⁴} ≤ exp(2048K·εZ)` along executions,
+`K ≤ 2²⁹`, success `> 2^(1/64)·θ` before the hop is success `> θ` after it,
+`θ = T·2⁻¹²⁶ + 2⁻²⁸⁰`. -/
+theorem thresh_sampler1024 (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^ 29) (x y : ℝ≥0∞)
+    (hxy : x ^ ((2 : ℝ) ^ 14 / ((2 : ℝ) ^ 14 - 1)) /
+      ENNReal.ofReal (Real.exp (2048 * K * εZ (2 ^ 14))) ≤ y)
+    (hx : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) * (T * 2 ^ (-(126 : ℝ)) + 2 ^ (-(280 : ℝ))) < x) :
+    T * (2 : ℝ≥0∞) ^ (-(126 : ℝ)) + 2 ^ (-(280 : ℝ)) < y :=
+  thresh_samplerE _ 126 (by norm_num)
+    (by rw [Nat.cast_ofNat]; exact le_add_right (le_mul_of_one_le_left (by positivity) hT))
+    _ (by have : (K : ℝ) ≤ 2 ^ 29 := by exact_mod_cast hK
+          push_cast; linarith) x y hxy hx
+
+/-- **Node** (arithmetic) at Falcon-1024 (λ = 256): with `R_{2¹⁴} ≤ exp(2048K·εZ)` along
+executions, `K ≤ 2²⁹`, success `> 2^(1/64)·θ` before the hop is success `> θ` after it,
+`θ = T·2⁻²⁵⁴ + 2⁻²⁸⁰`. -/
+theorem thresh_sampler1024_256 (T : ℝ≥0∞) (hT : 1 ≤ T) (K : ℕ) (hK : K ≤ 2 ^ 29) (x y : ℝ≥0∞)
+    (hxy : x ^ ((2 : ℝ) ^ 14 / ((2 : ℝ) ^ 14 - 1)) /
+      ENNReal.ofReal (Real.exp (2048 * K * εZ (2 ^ 14))) ≤ y)
+    (hx : (2 : ℝ≥0∞) ^ (1 / 64 : ℝ) * (T * 2 ^ (-(254 : ℝ)) + 2 ^ (-(280 : ℝ))) < x) :
+    T * (2 : ℝ≥0∞) ^ (-(254 : ℝ)) + 2 ^ (-(280 : ℝ)) < y :=
+  thresh_samplerE _ 254 (by norm_num)
+    (by rw [Nat.cast_ofNat]; exact le_add_right (le_mul_of_one_le_left (by positivity) hT))
+    _ (by have : (K : ℝ) ≤ 2 ^ 29 := by exact_mod_cast hK
+          push_cast; linarith) x y hxy hx
+
 /-- **The executable signer with the executable SamplerZ against exact Falcon at Falcon-512.**
 For admissible choices without range checks, `1/q` at 77 bits and every SamplerZ choice `C.samp`;
 every experiment `oe` on `SampKey`s with at most `K ≤ 2³⁹` signing queries along every execution;
@@ -348,7 +481,7 @@ Hypotheses on ideal worlds only: those of `falcon512_exec_vs_true` for an ideal 
 (`hE`, `hM`, `hF`, `hsamp`), and `hI`. Not proved: what `falcon512_exec_vs_true`
 does not prove; the PRNG (`ub` is ideal); the unbounded loop (`fuel = 128`); SamplerZ's
 floating/fixed-point arithmetic (`x`, `ccs`, `r` exact in `ℚ`); NIST's 79-bit table (`tab79` is
-ours). -/
+ours). On checked keys: `falcon512_exec_sampler_vs_true_checked` (`Exec.SampKeyCheck`). -/
 theorem falcon512_exec_sampler_vs_true [∀ t, Nonempty (aux t)]
     (C : Choices) (hC : Adm C) (hR : C.rchk = none) (hq77 : C.qinv = .w77) (δq : ℕ → ℚ)
     (K : ℕ) (hK : K ≤ 2 ^ 39) (hδ : (K : ℝ) * s2B (61 / 2) (fun j => (δq j : ℝ)) ≤ 1 / 2 ^ 9)

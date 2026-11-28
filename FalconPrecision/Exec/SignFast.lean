@@ -13,7 +13,9 @@ As in `Exec.CheckFast`: every vector of `fftW`, `splitW`, `mergeW`, `updW`, `tar
 an `Array` (`toArr`, read back by `ofArr`), and `ffsXA`, `signXA` compute each split, merge, line-10
 update and target once. Each is proved equal to the original: `ofArr_fftWA`, `ofArr_splitWA_fst`,
 `ofArr_splitWA_snd`, `ofArr_mergeWA`, `ofArr_updWA`, `ofArr_targetXA_fst`, `ofArr_targetXA_snd`,
-`ffsXA_eq`, `signXA_eq`, `storeCA_eq`, `nmaxA_toArr`, `checkRangeA_eq`. -/
+`ffsXA_eq`, `signXA_eq`, `storeCA_eq`, `nmaxA_toArr`, `checkRangeA_eq` (`ofArr_targetXAP`,
+`signXA_eqP`: at every size `2^logn`; `storeCA_eqP`, `checkRangeA_eqP`: at every size `2^(L+1)` and
+leaf `σq`; Falcon-1024: `L = 9`, `σ1024q`). -/
 
 @[expose] public section
 
@@ -80,25 +82,32 @@ theorem ofArr_updWA {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) :
   rfl
 
 /-- `targetX` as arrays. -/
-def targetXA (f F c : ZPoly) : Array (Cx 64) × Array (Cx 64) :=
+def targetXA {logn : ℕ} (f F c : ZPoly logn) : Array (Cx 64) × Array (Cx 64) :=
   let w := wordFn C.word
   let rm := C.x.rm
-  let ch := ofArr 9 (fftWA C 9 c)
-  let fh := ofArr 9 (fftWA C 9 f)
-  let Fh := ofArr 9 (fftWA C 9 F)
+  let ch := ofArr logn (fftWA C logn c)
+  let fh := ofArr logn (fftWA C logn f)
+  let Fh := ofArr logn (fftWA C logn F)
   match C.target with
   | .scaleFirst =>
-    let cq := ofArr 9 (toArr 9 fun o => (divqX rm C.qinv (ch o)).wr w)
-    (toArr 9 fun o => ((cq o).neg.wr w).mulW w rm (Fh o), toArr 9 fun o => (cq o).mulW w rm (fh o))
+    let cq := ofArr logn (toArr logn fun o => (divqX rm C.qinv (ch o)).wr w)
+    (toArr logn fun o => ((cq o).neg.wr w).mulW w rm (Fh o),
+      toArr logn fun o => (cq o).mulW w rm (fh o))
   | .multiplyFirst =>
-    (toArr 9 fun o => (divqX rm C.qinv (((ch o).mulW w rm (Fh o)).neg.wr w)).wr w,
-      toArr 9 fun o => (divqX rm C.qinv ((ch o).mulW w rm (fh o))).wr w)
+    (toArr logn fun o => (divqX rm C.qinv (((ch o).mulW w rm (Fh o)).neg.wr w)).wr w,
+      toArr logn fun o => (divqX rm C.qinv ((ch o).mulW w rm (fh o))).wr w)
+
+/-- `ofArr_targetXA` at every size `2^logn`. -/
+theorem ofArr_targetXAP {logn : ℕ} (f F c : ZPoly logn) :
+    ofArr logn (targetXA C f F c).1 = (targetX C f F c).1 ∧
+      ofArr logn (targetXA C f F c).2 = (targetX C f F c).2 := by
+  obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
+  cases tg <;> simp only [targetXA, targetX, ofArr_fftWA, ofArr_toArr, memo_eq, and_self]
 
 theorem ofArr_targetXA (f F c : ZPoly) :
     ofArr 9 (targetXA C f F c).1 = (targetX C f F c).1 ∧
-      ofArr 9 (targetXA C f F c).2 = (targetX C f F c).2 := by
-  obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
-  cases tg <;> simp only [targetXA, targetX, ofArr_fftWA, ofArr_toArr, memo_eq, and_self]
+      ofArr 9 (targetXA C f F c).2 = (targetX C f F c).2 :=
+  ofArr_targetXAP C f F c
 
 theorem ofArr_targetXA_fst (f F c : ZPoly) :
     ofArr 9 (targetXA C f F c).1 = (targetX C f F c).1 :=
@@ -146,29 +155,39 @@ theorem ffsXA_eq {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m �
     rfl
 
 /-- `signX` on arrays: the target computed once. -/
-def signXA {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9)
-    (k : RawKey) (c : ZPoly) : m (Option (ZPoly × ZPoly)) :=
+def signXA {m : Type → Type*} [Monad m] {logn : ℕ} (samp : Fx 64 → Fx 64 → m ℤ)
+    (T : CTree 64 logn) (k : RawKey logn) (c : ZPoly logn) :
+    m (Option (ZPoly logn × ZPoly logn)) :=
   if ∀ i, |c i| < 12289 then
     let tg := targetXA C k.f k.F c
-    (fun r => r.map fun s => (s.z0, s.z1)) <$> ffsXA C samp T (ofArr 9 tg.1) (ofArr 9 tg.2)
+    (fun r => r.map fun s => (s.z0, s.z1)) <$> ffsXA C samp T (ofArr logn tg.1) (ofArr logn tg.2)
   else pure none
 
-theorem signXA_eq {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9)
-    (k : RawKey) (c : ZPoly) : signXA C samp T k c = signX C samp T k c := by
+/-- `signXA_eq` at every size `2^logn`. -/
+theorem signXA_eqP {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) {logn : ℕ}
+    (T : CTree 64 logn) (k : RawKey logn) (c : ZPoly logn) :
+    signXA C samp T k c = signX C samp T k c := by
   unfold signXA signX
   by_cases hc : ∀ i, |c i| < 12289
   · rw [ite_eq_left_of_eq_true _ _ (eq_true hc), ite_eq_left_of_eq_true _ _ (eq_true hc)]
     dsimp only
-    rw [ffsXA_eq, ofArr_targetXA_fst, ofArr_targetXA_snd]
+    rw [ffsXA_eq, (ofArr_targetXAP C k.f k.F c).1, (ofArr_targetXAP C k.f k.F c).2]
   · rw [ite_eq_right_of_eq_false _ _ (eq_false hc), ite_eq_right_of_eq_false _ _ (eq_false hc)]
 
-/-- `storeC` from the array key expansion `expandBA`. -/
-def storeCA (k : RawKey) : CTree 64 9 :=
-  ((expandBA C.x (64 + C.xn) k).lower C.x.rm C.xn).centre
+theorem signXA_eq {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9)
+    (k : RawKey) (c : ZPoly) : signXA C samp T k c = signX C samp T k c :=
+  signXA_eqP C samp T k c
 
-theorem storeCA_eq (k : RawKey) : storeCA C k = storeC C.x C.xn k := by
-  rw [storeCA, expandBA_eq]
-  exact storeB_centre C.x C.xn k
+/-- `storeC` from the array key expansion `expandBA`. -/
+def storeCA {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : CTree 64 (L + 1) :=
+  ((expandBA C.x (64 + C.xn) k σq).lower C.x.rm C.xn).centre
+
+theorem storeCA_eqP {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ) :
+    storeCA C k σq = storeC C.x C.xn k σq := by
+  rw [storeCA, expandBA_eqP]
+  exact storeB_centreP C.x C.xn k σq
+
+theorem storeCA_eq (k : RawKey) : storeCA C k = storeC C.x C.xn k := storeCA_eqP C k σ512q
 
 /-- `nmax` of an array. -/
 def nmaxA (L : ℕ) (a : Array (Cx 64)) : ℚ := nmax L (ofArr L a)
@@ -177,11 +196,11 @@ theorem nmaxA_toArr (L : ℕ) (v : Out L → Cx 64) : nmaxA L (toArr L v) = nmax
   rw [nmaxA, ofArr_toArr]
 
 /-- `checkRange` on the array versions. -/
-def checkRangeA (i W : ℕ) (k : RawKey) : Bool :=
+def checkRangeA {L : ℕ} (i W : ℕ) (k : RawKey (L + 1)) (σq : ℚ := σ512q) : Bool :=
   let C0 := { C with word := none }
-  let bc : ℚ := 2 * (512 * 12288) + 1
-  let mf := nmaxA 9 (fftWA C0 9 k.f) + 1
-  let mF := nmaxA 9 (fftWA C0 9 k.F) + 1
+  let bc : ℚ := 2 * (2 ^ (L + 1) * 12288) + 1
+  let mf := nmaxA (L + 1) (fftWA C0 (L + 1) k.f) + 1
+  let mF := nmaxA (L + 1) (fftWA C0 (L + 1) k.F) + 1
   let tgt : List ℚ × ℚ := match C.target with
     | .scaleFirst =>
       let cq := 2 * bc / 12289 + 1
@@ -189,12 +208,16 @@ def checkRangeA (i W : ℕ) (k : RawKey) : Bool :=
     | .multiplyFirst =>
       let p := bc * max mF mf + 1
       ([p, 2 * p / 12289 + 1], 2 * p / 12289 + 1)
-  twOkFast C.x.rc && ([bc, 2 * l1Q k.f + 1, 2 * l1Q k.F + 1] ++ tgt.1).all (fitsQ i) &&
-    rangeT i W (imE i) (storeCA C k) tgt.2
+  twOkFastN C.x.rc (L + 1) && ([bc, 2 * l1Q k.f + 1, 2 * l1Q k.F + 1] ++ tgt.1).all (fitsQ i) &&
+    rangeT i W (imE i) (storeCA C k σq) tgt.2
 
-theorem checkRangeA_eq (i W : ℕ) (k : RawKey) : checkRangeA C i W k = checkRange C i W k := by
-  have e := storeCA_eq C k
+theorem checkRangeA_eqP {L : ℕ} (i W : ℕ) (k : RawKey (L + 1)) (σq : ℚ) :
+    checkRangeA C i W k σq = checkRange C i W k σq := by
+  have e := storeCA_eqP C k σq
   obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
-  cases tg <;> simp only [checkRangeA, checkRange, nmaxA, ofArr_fftWA, twOkFast_eq, e]
+  cases tg <;> simp only [checkRangeA, checkRange, nmaxA, ofArr_fftWA, twOkFastN_eq, e]
+
+theorem checkRangeA_eq (i W : ℕ) (k : RawKey) : checkRangeA C i W k = checkRange C i W k :=
+  checkRangeA_eqP C i W k σ512q
 
 end FalconPrecision.Exec

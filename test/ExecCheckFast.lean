@@ -1,6 +1,7 @@
 import FalconPrecision.Exec.CheckFast
 
-/-! `FalconPrecision.Exec.CheckFast`: array vectors, the twiddle tables of Falcon-512; axioms. -/
+/-! `FalconPrecision.Exec.CheckFast`: array vectors, the twiddle tables of Falcon-512 and
+Falcon-1024; axioms. -/
 
 open FalconPrecision.Exec FalconPrecision.Errors.FFTRec
 
@@ -15,6 +16,13 @@ open FalconPrecision.Exec FalconPrecision.Errors.FFTRec
 #guard_msgs in
 #eval decide (twOkFast .halfEven = true ∧ twOkFast .halfUp = true ∧ twOkFast .halfAway = true ∧
   twOkFast .floor = false)
+
+-- the tables of all 10 levels (Falcon-1024) within `0.7072·2⁻⁶⁴` (round to nearest), not with
+-- `floor`
+/-- info: true -/
+#guard_msgs in
+#eval decide (twOkFastN .halfEven 10 = true ∧ twOkFastN .halfUp 10 = true ∧
+  twOkFastN .halfAway 10 = true ∧ twOkFastN .floor 10 = false)
 
 -- the FFT of `3 + 5x` at `±i`, centres
 /-- info: true -/
@@ -71,3 +79,24 @@ info: 'FalconPrecision.Exec.checkFast_eq' depends on axioms:
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms checkFast_eq
+
+/--
+info: 'FalconPrecision.Exec.ldlBA_eqP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms ldlBA_eqP
+
+/--
+info: 'FalconPrecision.Exec.expandBA_eqP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms expandBA_eqP
+
+/--
+info: 'FalconPrecision.Exec.checkFast_eqP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms checkFast_eqP

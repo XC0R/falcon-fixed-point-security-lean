@@ -12,9 +12,9 @@ public import FalconPrecision.Errors.HopB
 
 `check P n δq k` is computable. It runs key expansion in balls at `64 + n` fraction bits on a raw
 key `k`, rounds every stored ball once to 64 fraction bits (`storeB`), and decides: the FFTs of `f`
-and `F` within `255` and `3500` (`Key.hf`, `Key.hF`); every stored leaf `σ̄` in
+and `F` within `255` and `3500` (`KeyP.hf`, `KeyP.hF`); every stored leaf `σ̄` in
 `[1.277833697, 1.8205]` and every stored factor `‖ℓ̂‖ ≤ lam512 L` (`FTree`); every stored `ℓ̂`
-conjugate-symmetric, exactly (`FTree.Real`); every rounded factor ball of radius `≤ δq L` (`Close`,
+conjugate-symmetric, exactly (`FTreeP.Real`); every rounded factor ball of radius `≤ δq L` (`Close`,
 nodes); every rounded leaf ball inside `[1.2778, 1.825]` with relative radius `≤ 2⁻⁴²` (`Close`,
 leaves); and `fG - gF = q` in `ℤ[x]/(x⁵¹² + 1)` (`ntruB`), in every root mode.
 
@@ -23,13 +23,17 @@ with `δ j = δq j`, stored tree `storeC` (the values at 64 fraction bits a sign
 tree `KeyB.trueTree` (exact ffLDL⋆ of `B·B⋆`). It is proved with no other hypothesis, from the
 ball lemmas (`Ball`, `Twiddle`), `fftB_holds`, `ntru_det`, `ntru_root` and `expandB_centre`.
 
+`check_soundP`: the same at every size `2^(L+1)`, with the thresholds, the bounds of `KeyBP` and
+the signing `σ` of the true tree as a `CheckParams`; its Falcon-1024 instance is `check1024_sound`
+(`Exec.KeyCheck1024`).
+
 `falcon512_fixed_vs_true_checked`: `HopB.falcon512_fixed_vs_true` for experiments whose signing
 queries carry raw keys passing `check` (`specK`), embedded into `specS` by `CheckedKey.toGood`.
 Not proved here: that any Falcon key passes `check` (not proved for any key: `#eval` runs of
 `checkFast` on round-3 KAT keys are not kernel proofs), at a given `δq` and `n` (`n = 0`: an
 expansion at 64 fraction bits); the word size: key expansion runs in unbounded `Int`,
 `InRange` of the stored values is not checked; and what `falcon512_fixed_vs_true` does not prove
-apart from `KeyB.Good δ` (`FTree.Real`, `Close δ`, the true leaf range), the tie of the stored tree
+apart from `KeyB.Good δ` (`FTreeP.Real`, `Close δ`, the true leaf range), the tie of the stored tree
 to `f, F` (`storeC`) and `fG - gF = q` (given by `check`). -/
 
 @[expose] public section
@@ -136,16 +140,24 @@ theorem Cx.norm_le_lam512 {f L : ℕ} {z : Cx f} (h : z.nsq ≤ lam512q L ^ 2) :
   exact (pow_le_pow_iff_left₀ (norm_nonneg _) h0 two_ne_zero).1
     (by rw [Cx.norm_sq_eq_nsq]; exact_mod_cast h)
 
-/-- The conditions of `FTree` on a stored tree: leaves in `[σmin, σmax]`, `‖ℓ̂‖ ≤ lam512 L`. -/
-def CTree.Ok {f : ℕ} : {L : ℕ} → CTree f L → Prop
-  | _, .leaf σ => 1277833697 / 10 ^ 9 ≤ σ.toRat ∧ σ.toRat ≤ 18205 / 10000
-  | _, @CTree.node _ L ℓ T0 T1 => (∀ o, (ℓ o).nsq ≤ lam512q L ^ 2) ∧ T0.Ok ∧ T1.Ok
+theorem Cx.norm_le_of_nsq {f : ℕ} {z : Cx f} {q : ℚ} {R : ℝ} (hq : 0 ≤ q) (hR : (q : ℝ) ≤ R)
+    (h : z.nsq ≤ q ^ 2) : ‖z.toC‖ ≤ R :=
+  ((pow_le_pow_iff_left₀ (norm_nonneg _) (by exact_mod_cast hq) two_ne_zero).1
+    (by rw [Cx.norm_sq_eq_nsq]; exact_mod_cast h)).trans hR
+
+/-- The conditions of `FTreeP` on a stored tree: leaves in `[σlo, σmax]`, `‖ℓ̂‖ ≤ Λq L` (Falcon-512,
+`FTree`: `σlo = σmin = 1.277833697`, `Λq = lam512q`). -/
+def CTree.Ok {f : ℕ} (σlo : ℚ := 1277833697 / 10 ^ 9) (Λq : ℕ → ℚ := lam512q) :
+    {L : ℕ} → CTree f L → Prop
+  | _, .leaf σ => σlo ≤ σ.toRat ∧ σ.toRat ≤ 18205 / 10000
+  | _, @CTree.node _ L ℓ T0 T1 => (∀ o, (ℓ o).nsq ≤ Λq L ^ 2) ∧ T0.Ok σlo Λq ∧ T1.Ok σlo Λq
 
 /-- `CTree.Ok`, decided. -/
-def CTree.okB {f : ℕ} : {L : ℕ} → CTree f L → Bool
-  | _, .leaf σ => decide (1277833697 / 10 ^ 9 ≤ σ.toRat) && decide (σ.toRat ≤ 18205 / 10000)
+def CTree.okB {f : ℕ} (σlo : ℚ := 1277833697 / 10 ^ 9) (Λq : ℕ → ℚ := lam512q) :
+    {L : ℕ} → CTree f L → Bool
+  | _, .leaf σ => decide (σlo ≤ σ.toRat) && decide (σ.toRat ≤ 18205 / 10000)
   | _, @CTree.node _ L ℓ T0 T1 =>
-    allOut (L + 1) (fun o => decide ((ℓ o).nsq ≤ lam512q L ^ 2)) && T0.okB && T1.okB
+    allOut (L + 1) (fun o => decide ((ℓ o).nsq ≤ Λq L ^ 2)) && T0.okB σlo Λq && T1.okB σlo Λq
 
 /-- Every stored `ℓ̂` conjugate-symmetric, exactly. -/
 def CTree.realB {f : ℕ} : {L : ℕ} → CTree f L → Bool
@@ -153,7 +165,8 @@ def CTree.realB {f : ℕ} : {L : ℕ} → CTree f L → Bool
   | _, @CTree.node _ L ℓ T0 T1 =>
     allOut (L + 1) (fun o => decide (ℓ (cj (L + 1) o) = (ℓ o).conjg)) && T0.realB && T1.realB
 
-theorem CTree.ok_of_okB {f : ℕ} : {L : ℕ} → (T : CTree f L) → T.okB = true → T.Ok
+theorem CTree.ok_of_okB {f : ℕ} {σlo : ℚ} {Λq : ℕ → ℚ} : {L : ℕ} → (T : CTree f L) →
+    T.okB σlo Λq = true → T.Ok σlo Λq
   | _, .leaf σ, h => by
     simpa only [CTree.okB, CTree.Ok, Bool.and_eq_true, decide_eq_true_eq] using h
   | _, @CTree.node _ L ℓ T0 T1, h => by
@@ -174,6 +187,49 @@ noncomputable def CTree.toFTree {f : ℕ} : {L : ℕ} → (T : CTree f L) → T.
 theorem CTree.toFTree_congr {f L : ℕ} {T T' : CTree f L} (e : T = T') (h : T.Ok) (h' : T'.Ok) :
     T.toFTree h = T'.toFTree h' := by
   subst e; rfl
+
+/-- A stored tree passing `CTree.Ok σlo Λq` as an `FTreeP σl hlo Λ` (`σl ≤ σlo`,
+`0 ≤ Λq L ≤ Λ L`). -/
+noncomputable def CTree.toFTreeP {f : ℕ} {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ}
+    {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo) (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L) :
+    {L : ℕ} → (T : CTree f L) → T.Ok σlo Λq → FTreeP σl hlo Λ L
+  | _, .leaf σ, h => .leaf σ.toReal (by
+      have h1 := Rat.cast_le (K := ℝ) |>.2 h.1
+      have h2 := Rat.cast_le (K := ℝ) |>.2 h.2
+      rw [Fx.toReal_eq_toRat]; push_cast at h2 ⊢; exact ⟨hσ.trans h1, h2⟩)
+  | _, @CTree.node _ L ℓ T0 T1, h =>
+    .node (fun o => (ℓ o).toC) (fun o => Cx.norm_le_of_nsq (hΛ L).1 (hΛ L).2 (h.1 o))
+      (T0.toFTreeP hσ hΛ h.2.1) (T1.toFTreeP hσ hΛ h.2.2)
+
+theorem CTree.toFTreeP_congr {f L : ℕ} {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ}
+    {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo) (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L)
+    {T T' : CTree f L} (e : T = T') (h : T.Ok σlo Λq) (h' : T'.Ok σlo Λq) :
+    T.toFTreeP (hlo := hlo) hσ hΛ h = T'.toFTreeP hσ hΛ h' := by
+  subst e; rfl
+
+theorem CTree.real_toFTreeP {f : ℕ} {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ}
+    {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo) (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L) :
+    {L : ℕ} → (T : CTree f L) → (h : T.Ok σlo Λq) → T.realB = true →
+    (T.toFTreeP (hlo := hlo) hσ hΛ h).Real
+  | _, .leaf _, _, _ => trivial
+  | _, @CTree.node _ L ℓ T0 T1, h, hr => by
+    simp only [CTree.realB, Bool.and_eq_true] at hr
+    refine ⟨fun o => ?_, real_toFTreeP hσ hΛ T0 h.2.1 hr.1.2, real_toFTreeP hσ hΛ T1 h.2.2 hr.2⟩
+    change (ℓ (cj (L + 1) o)).toC = conj (ℓ o).toC
+    rw [of_decide_eq_true ((allOut_iff _ _).1 hr.1.1 o), Cx.toC_conjg]
+
+theorem lam512q_bounds (L : ℕ) : 0 ≤ lam512q L ∧ (lam512q L : ℝ) ≤ lam512 L :=
+  ⟨by unfold lam512q; split_ifs <;> norm_num, (lam512q_eq L).le⟩
+
+/-- `toFTree` is `toFTreeP` at the Falcon-512 bounds. -/
+theorem CTree.toFTree_eq_toFTreeP {f : ℕ}
+    (hσ : (1277833697 / 10 ^ 9 : ℝ) ≤ ((1277833697 / 10 ^ 9 : ℚ) : ℝ))
+    (hΛ : ∀ L, 0 ≤ lam512q L ∧ (lam512q L : ℝ) ≤ lam512 L) :
+    {L : ℕ} → (T : CTree f L) → (h : T.Ok) → T.toFTree h = T.toFTreeP (hlo := σmin512_ok) hσ hΛ h
+  | _, .leaf _, _ => rfl
+  | _, @CTree.node _ _ _ T0 T1, h => by
+    simp only [CTree.toFTree, CTree.toFTreeP, toFTree_eq_toFTreeP hσ hΛ T0 h.2.1,
+      toFTree_eq_toFTreeP hσ hΛ T1 h.2.2]
 
 theorem CTree.real_toFTree {f : ℕ} : {L : ℕ} → (T : CTree f L) → (h : T.Ok) → T.realB = true →
     (T.toFTree h).Real
@@ -212,6 +268,17 @@ theorem BTree.close_of {f : ℕ} (δq : ℕ → ℚ) : {L : ℕ} → (B : BTree 
     simp only [BTree.radOkB, Bool.and_eq_true] at hr
     exact ⟨fun o => CB.norm_sub_le_of_radLeB (hH.1 o) ((allOut_iff _ _).1 hr.1.1 o),
       close_of δq T0 U0 hH.2.1 hr.1.2 h.2.1, close_of δq T1 U1 hH.2.2 hr.2 h.2.2⟩
+
+theorem BTree.close_ofP {f : ℕ} {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ}
+    {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo) (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L)
+    (δq : ℕ → ℚ) : {L : ℕ} → (B : BTree f L) → (U : LTree L) →
+    B.HoldsT U → B.radOkB δq = true → (h : B.centre.Ok σlo Λq) →
+    Close (fun j => (δq j : ℝ)) (B.centre.toFTreeP (hlo := hlo) hσ hΛ h) U
+  | _, .leaf _, .leaf _, hH, hr, _ => CB.close_leaf hH hr
+  | _, @BTree.node _ L ℓ T0 T1, .node ℓ' U0 U1, hH, hr, h => by
+    simp only [BTree.radOkB, Bool.and_eq_true] at hr
+    exact ⟨fun o => CB.norm_sub_le_of_radLeB (hH.1 o) ((allOut_iff _ _).1 hr.1.1 o),
+      close_ofP hσ hΛ δq T0 U0 hH.2.1 hr.1.2 h.2.1, close_ofP hσ hΛ δq T1 U1 hH.2.2 hr.2 h.2.2⟩
 
 /-! ## The ball expansion holds the true tree -/
 
@@ -252,6 +319,24 @@ theorem d11B_holds (L : ℕ) {b00 b10 b11 : Out L → CB f} {g00 g10 g11 : Out L
   simp only [d11B, memo_eq]
   exact (h11 o).sub (((h10 o).normSq P.rm).divR P.rm P.dm (h00 o))
 
+/-- `ldlStepB_holdsT` at every signing `σ`. -/
+theorem ldlStepB_holdsTP (σ : ℝ) (L : ℕ) {b00 b10 bd : Out (L + 1) → CB f}
+    {g00 g10 gd : Out (L + 1) → ℂ} (h00 : ∀ o, (b00 o).Holds (g00 o))
+    (h10 : ∀ o, (b10 o).Holds (g10 o)) (hd : ∀ o, (bd o).Holds (gd o))
+    {rec : (Out L → CB f) → (Out L → CB f) → (Out L → CB f) → BTree f L}
+    (hrec : ∀ (c00 c10 c11 : Out L → CB f) (e00 e10 e11 : Out L → ℂ),
+      (∀ o, (c00 o).Holds (e00 o)) → (∀ o, (c10 o).Holds (e10 o)) →
+      (∀ o, (c11 o).Holds (e11 o)) → (rec c00 c10 c11).HoldsT (ffldl σ L e00 e10 e11)) :
+    (ldlStepB P f L b00 b10 bd rec).HoldsT (.node (fun o => g10 o / g00 o)
+      (ffldl σ L (splitE g00).1 (fun o => conj ((splitE g00).2 o)) (splitE g00).1)
+      (ffldl σ L (splitE gd).1 (fun o => conj ((splitE gd).2 o)) (splitE gd).1)) := by
+  have s0 := splitB_holds P f L h00
+  have s1 := splitB_holds P f L hd
+  refine ⟨fun o => ?_, hrec _ _ _ _ _ _ s0.1 (fun o => (s0.2 o).conjg) s0.1,
+    hrec _ _ _ _ _ _ s1.1 (fun o => (s1.2 o).conjg) s1.1⟩
+  simp only [memo_eq]
+  exact (h10 o).divR P.rm P.dm (h00 o)
+
 theorem ldlStepB_holdsT (L : ℕ) {b00 b10 bd : Out (L + 1) → CB f}
     {g00 g10 gd : Out (L + 1) → ℂ} (h00 : ∀ o, (b00 o).Holds (g00 o))
     (h10 : ∀ o, (b10 o).Holds (g10 o)) (hd : ∀ o, (bd o).Holds (gd o))
@@ -261,55 +346,60 @@ theorem ldlStepB_holdsT (L : ℕ) {b00 b10 bd : Out (L + 1) → CB f}
       (∀ o, (c11 o).Holds (e11 o)) → (rec c00 c10 c11).HoldsT (ffldl σ512 L e00 e10 e11)) :
     (ldlStepB P f L b00 b10 bd rec).HoldsT (.node (fun o => g10 o / g00 o)
       (ffldl σ512 L (splitE g00).1 (fun o => conj ((splitE g00).2 o)) (splitE g00).1)
-      (ffldl σ512 L (splitE gd).1 (fun o => conj ((splitE gd).2 o)) (splitE gd).1)) := by
-  have s0 := splitB_holds P f L h00
-  have s1 := splitB_holds P f L hd
-  refine ⟨fun o => ?_, hrec _ _ _ _ _ _ s0.1 (fun o => (s0.2 o).conjg) s0.1,
-    hrec _ _ _ _ _ _ s1.1 (fun o => (s1.2 o).conjg) s1.1⟩
-  simp only [memo_eq]
-  exact (h10 o).divR P.rm P.dm (h00 o)
+      (ffldl σ512 L (splitE gd).1 (fun o => conj ((splitE gd).2 o)) (splitE gd).1)) :=
+  ldlStepB_holdsTP P f σ512 L h00 h10 hd hrec
 
 theorem σ512_eq : σ512 = (σ512q : ℝ) := by norm_num [σ512, σ512q]
 
+/-- `ldlB_holdsT` at every signing `σ = σq ≥ 0`. -/
+theorem ldlB_holdsTP (σ : ℝ) (σq : ℚ) (hσ : σ = σq) (hσ0 : 0 ≤ σq) :
+    ∀ (L : ℕ) (b00 b10 b11 : Out L → CB f) (g00 g10 g11 : Out L → ℂ),
+    (∀ o, (b00 o).Holds (g00 o)) → (∀ o, (b10 o).Holds (g10 o)) →
+    (∀ o, (b11 o).Holds (g11 o)) → (ldlB P f L b00 b10 b11 σq).HoldsT (ffldl σ L g00 g10 g11)
+  | 0, b00, _, _, g00, _, _, h00, _, _ => by
+    change (CB.leaf P.rm P.rc σq (b00 ())).Holds ((σ / √(g00 ()).re : ℝ) : ℂ)
+    rw [hσ]
+    exact (h00 ()).leaf P.rm P.rc σq hσ0
+  | L + 1, _, _, _, _, _, _, h00, h10, h11 =>
+    ldlStepB_holdsTP P f σ L h00 h10 (d11B_holds P f (L + 1) h00 h10 h11)
+      (ldlB_holdsTP σ σq hσ hσ0 L)
+
 theorem ldlB_holdsT : ∀ (L : ℕ) (b00 b10 b11 : Out L → CB f) (g00 g10 g11 : Out L → ℂ),
     (∀ o, (b00 o).Holds (g00 o)) → (∀ o, (b10 o).Holds (g10 o)) →
-    (∀ o, (b11 o).Holds (g11 o)) → (ldlB P f L b00 b10 b11).HoldsT (ffldl σ512 L g00 g10 g11)
-  | 0, b00, _, _, g00, _, _, h00, _, _ => by
-    change (CB.leaf P.rm P.rc σ512q (b00 ())).Holds ((σ512 / √(g00 ()).re : ℝ) : ℂ)
-    rw [σ512_eq]
-    exact (h00 ()).leaf P.rm P.rc σ512q (by norm_num [σ512q])
-  | L + 1, _, _, _, _, _, _, h00, h10, h11 =>
-    ldlStepB_holdsT P f L h00 h10 (d11B_holds P f (L + 1) h00 h10 h11) (ldlB_holdsT L)
+    (∀ o, (b11 o).Holds (g11 o)) → (ldlB P f L b00 b10 b11).HoldsT (ffldl σ512 L g00 g10 g11) :=
+  ldlB_holdsTP P f σ512 σ512q σ512_eq (by norm_num [σ512q])
 
 /-! ## Raw keys -/
 
-/-- `(B·B⋆)₀₀ = gg⋆ + ff⋆` of a raw key, exact: `KeyB.gram00` on the raw polynomials (a `KeyB`
+/-- `(B·B⋆)₀₀ = gg⋆ + ff⋆` of a raw key, exact: `KeyBP.gram00` on the raw polynomials (a `KeyB`
 needs `hf`, `hF` and a tree, which a raw key lacks; `toKeyB_trueTree` is `rfl`). -/
-noncomputable def RawKey.g00 (k : RawKey) (o : Out 9) : ℂ :=
+noncomputable def RawKey.g00 {logn : ℕ} (k : RawKey logn) (o : Out logn) : ℂ :=
   fftZ k.g o * conj (fftZ k.g o) + fftZ k.f o * conj (fftZ k.f o)
 
 /-- `(B·B⋆)₁₀ = Gg⋆ + Ff⋆` of a raw key, exact. -/
-noncomputable def RawKey.g10 (k : RawKey) (o : Out 9) : ℂ :=
+noncomputable def RawKey.g10 {logn : ℕ} (k : RawKey logn) (o : Out logn) : ℂ :=
   fftZ k.G o * conj (fftZ k.g o) + fftZ k.F o * conj (fftZ k.f o)
 
 /-- `(B·B⋆)₁₁ = GG⋆ + FF⋆` of a raw key, exact. -/
-noncomputable def RawKey.g11 (k : RawKey) (o : Out 9) : ℂ :=
+noncomputable def RawKey.g11 {logn : ℕ} (k : RawKey logn) (o : Out logn) : ℂ :=
   fftZ k.G o * conj (fftZ k.G o) + fftZ k.F o * conj (fftZ k.F o)
 
-/-- The true tree of a raw key: exact ffLDL⋆ of `B·B⋆` (`KeyB.trueTree`). -/
-noncomputable def RawKey.trueTree (k : RawKey) : LTree 9 := ffldl σ512 9 k.g00 k.g10 k.g11
+/-- The true tree of a raw key: exact ffLDL⋆ of `B·B⋆` at the signing `σ` (`KeyBP.trueTree`;
+Falcon-512: `σ512`). -/
+noncomputable def RawKey.trueTree {logn : ℕ} (k : RawKey logn) (σ : ℝ := σ512) : LTree logn :=
+  ffldl σ logn k.g00 k.g10 k.g11
 
-/-- Coefficient `i` of `a·b` in `ℤ[x]/(x⁵¹² + 1)`. -/
-def ncoef (a b : Fin (2 ^ 9) → ℤ) (i : Fin (2 ^ 9)) : ℤ :=
-  ∑ j : Fin (2 ^ 9), if h : j.1 ≤ i.1 then a j * b ⟨i.1 - j.1, by have := i.2; omega⟩
-    else -(a j * b ⟨2 ^ 9 + i.1 - j.1, by omega⟩)
+/-- Coefficient `i` of `a·b` in `ℤ[x]/(x^(2^logn) + 1)`. -/
+def ncoef {logn : ℕ} (a b : Fin (2 ^ logn) → ℤ) (i : Fin (2 ^ logn)) : ℤ :=
+  ∑ j : Fin (2 ^ logn), if h : j.1 ≤ i.1 then a j * b ⟨i.1 - j.1, by have := i.2; omega⟩
+    else -(a j * b ⟨2 ^ logn + i.1 - j.1, by omega⟩)
 
-/-- The NTRU equation `fG - gF = q` in `ℤ[x]/(x⁵¹² + 1)`, decided. -/
-def ntruB (k : RawKey) : Bool :=
-  decide (∀ i : Fin (2 ^ 9), ncoef k.f k.G i - ncoef k.g k.F i = if i.1 = 0 then 12289 else 0)
+/-- The NTRU equation `fG - gF = q` in `ℤ[x]/(x^(2^logn) + 1)`, decided. -/
+def ntruB {logn : ℕ} (k : RawKey logn) : Bool :=
+  decide (∀ i : Fin (2 ^ logn), ncoef k.f k.G i - ncoef k.g k.F i = if i.1 = 0 then 12289 else 0)
 
-/-- Evaluation at a root of `x⁵¹² + 1` turns the negacyclic product into the product. -/
-theorem evalAt_ncoef (a b : Fin (2 ^ 9) → ℤ) {z : ℂ} (hz : z ^ 2 ^ 9 = -1) :
+/-- Evaluation at a root of `x^(2^logn) + 1` turns the negacyclic product into the product. -/
+theorem evalAt_ncoef {logn : ℕ} (a b : Fin (2 ^ logn) → ℤ) {z : ℂ} (hz : z ^ 2 ^ logn = -1) :
     evalAt (fun i => (ncoef a b i : ℂ)) z =
       evalAt (fun i => (a i : ℂ)) z * evalAt (fun i => (b i : ℂ)) z := by
   simp only [evalAt, ncoef]
@@ -318,38 +408,44 @@ theorem evalAt_ncoef (a b : Fin (2 ^ 9) → ℤ) {z : ℂ} (hz : z ^ 2 ^ 9 = -1)
   conv_lhs => rw [Finset.sum_comm]
   refine Finset.sum_congr rfl fun j _ =>
     (Fintype.sum_equiv (Equiv.addLeft j) _ _ fun k => ?_).symm
-  have hv : ((Equiv.addLeft j k : Fin (2 ^ 9)) : ℕ) = (j.1 + k.1) % 512 := Fin.val_add j k
+  have hj := j.2
+  have hk := k.2
+  have hv : ((Equiv.addLeft j k : Fin (2 ^ logn)) : ℕ) = j.1 + k.1 - 2 ^ logn ∧
+      2 ^ logn ≤ j.1 + k.1 ∨
+      ((Equiv.addLeft j k : Fin (2 ^ logn)) : ℕ) = j.1 + k.1 ∧ j.1 + k.1 < 2 ^ logn := by
+    rw [show (Equiv.addLeft j k : Fin (2 ^ logn)) = j + k from rfl, Fin.val_add_eq_ite]
+    split_ifs <;> omega
   split_ifs with h
-  · have e : b ⟨(Equiv.addLeft j k : Fin (2 ^ 9)).1 - j.1, by omega⟩ = b k :=
+  · have e : b ⟨(Equiv.addLeft j k : Fin (2 ^ logn)).1 - j.1, by omega⟩ = b k :=
       congrArg b (Fin.ext (by dsimp only; omega))
-    have hp : z ^ j.1 * z ^ k.1 = z ^ (Equiv.addLeft j k : Fin (2 ^ 9)).1 := by
-      rw [← pow_add, show j.1 + k.1 = (Equiv.addLeft j k : Fin (2 ^ 9)).1 by omega]
+    have hp : z ^ j.1 * z ^ k.1 = z ^ (Equiv.addLeft j k : Fin (2 ^ logn)).1 := by
+      rw [← pow_add, show j.1 + k.1 = (Equiv.addLeft j k : Fin (2 ^ logn)).1 by omega]
     rw [e]; push_cast
     linear_combination ((a j : ℂ) * b k) * hp
-  · have e : b ⟨2 ^ 9 + (Equiv.addLeft j k : Fin (2 ^ 9)).1 - j.1, by omega⟩ = b k :=
+  · have e : b ⟨2 ^ logn + (Equiv.addLeft j k : Fin (2 ^ logn)).1 - j.1, by omega⟩ = b k :=
       congrArg b (Fin.ext (by dsimp only; omega))
-    have hp : z ^ j.1 * z ^ k.1 = -z ^ (Equiv.addLeft j k : Fin (2 ^ 9)).1 := by
-      rw [← pow_add, show j.1 + k.1 = 2 ^ 9 + (Equiv.addLeft j k : Fin (2 ^ 9)).1 by omega,
+    have hp : z ^ j.1 * z ^ k.1 = -z ^ (Equiv.addLeft j k : Fin (2 ^ logn)).1 := by
+      rw [← pow_add, show j.1 + k.1 = 2 ^ logn + (Equiv.addLeft j k : Fin (2 ^ logn)).1 by omega,
         pow_add, hz, neg_one_mul]
     rw [e]; push_cast
     linear_combination ((a j : ℂ) * b k) * hp
 
 /-- `fG - gF = q` gives `f̂Ĝ - ĝF̂ = q` at every FFT point. -/
-theorem ntru_det (k : RawKey) (h : ntruB k = true) (o : Out 9) :
+theorem ntru_det {logn : ℕ} (k : RawKey logn) (h : ntruB k = true) (o : Out logn) :
     fftZ k.f o * fftZ k.G o - fftZ k.g o * fftZ k.F o = 12289 := by
   unfold ntruB at h
   have hc := of_decide_eq_true h
-  have hz := pt_pow 9 o
+  have hz := pt_pow logn o
   simp only [fftZ, fftE]
   rw [← evalAt_ncoef k.f k.G hz, ← evalAt_ncoef k.g k.F hz]
   simp only [evalAt, ← Finset.sum_sub_distrib, ← sub_mul, ← Int.cast_sub, hc]
-  rw [Finset.sum_eq_single ⟨0, by norm_num⟩
+  rw [Finset.sum_eq_single ⟨0, Nat.two_pow_pos logn⟩
     (fun i _ hi => by simp [show i.1 ≠ 0 from fun h => hi (Fin.ext h)]) (by simp)]
   simp
 
 /-- The NTRU identity at the root: `D11 = g11 - |g10|²/g00 = q²/g00`. -/
-theorem ntru_root (k : RawKey)
-    (h : ∀ o, fftZ k.f o * fftZ k.G o - fftZ k.g o * fftZ k.F o = 12289) (o : Out 9) :
+theorem ntru_root {logn : ℕ} (k : RawKey logn)
+    (h : ∀ o, fftZ k.f o * fftZ k.G o - fftZ k.g o * fftZ k.F o = 12289) (o : Out logn) :
     ((12289 ^ 2 : ℤ) : ℂ) / k.g00 o = k.g11 o - k.g10 o * conj (k.g10 o) / k.g00 o := by
   have hd := h o
   have hd' := congrArg conj hd
@@ -368,64 +464,79 @@ theorem ntru_root (k : RawKey)
   rw [eq_sub_iff_add_eq, ← add_div, div_eq_iff h0]
   linear_combination -I
 
-theorem gramB_holds (k : RawKey) :
+theorem gramB_holds {logn : ℕ} (k : RawKey logn) :
     (∀ o, ((gramB P f k).1 o).Holds (k.g00 o)) ∧ (∀ o, ((gramB P f k).2.1 o).Holds (k.g10 o)) ∧
       ∀ o, ((gramB P f k).2.2 o).Holds (k.g11 o) := by
-  have hf := fftB_holds P f 9 k.f
-  have hg := fftB_holds P f 9 k.g
-  have hF := fftB_holds P f 9 k.F
-  have hG := fftB_holds P f 9 k.G
+  have hf := fftB_holds P f logn k.f
+  have hg := fftB_holds P f logn k.g
+  have hF := fftB_holds P f logn k.F
+  have hG := fftB_holds P f logn k.G
   refine ⟨fun o => ?_, fun o => ?_, fun o => ?_⟩ <;> simp only [gramB, memo_eq]
   · exact ((hg o).normSq P.rm).add ((hf o).normSq P.rm)
   · exact ((hG o).mul P.rm (hg o).conjg).add ((hF o).mul P.rm (hf o).conjg)
   · exact ((hG o).normSq P.rm).add ((hF o).normSq P.rm)
 
-theorem rootB_holds (k : RawKey) (hn : P.root = .ntru → ntruB k = true) (o : Out 9) :
+theorem rootB_holds {logn : ℕ} (k : RawKey logn) (hn : P.root = .ntru → ntruB k = true)
+    (o : Out logn) :
     (rootB P f (gramB P f k) o).Holds (k.g11 o - k.g10 o * conj (k.g10 o) / k.g00 o) := by
   obtain ⟨h00, h10, h11⟩ := gramB_holds P f k
   rcases hP : P.root with _ | _
   · simp only [rootB, hP]
-    exact d11B_holds P f 9 h00 h10 h11 o
+    exact d11B_holds P f logn h00 h10 h11 o
   · simp only [rootB, hP, memo_eq]
     exact ((CB.ofInt_holds _).divR P.rm P.dm (h00 o)).congr (ntru_root k (ntru_det k (hn hP)) o)
+
+/-- `expandB_holdsT` at every size `2^(L+1)` and signing `σ = σq ≥ 0`. -/
+theorem expandB_holdsTP (σ : ℝ) (σq : ℚ) (hσ : σ = σq) (hσ0 : 0 ≤ σq) {L : ℕ}
+    (k : RawKey (L + 1)) (hn : P.root = .ntru → ntruB k = true) :
+    (expandB P f k σq).HoldsT (k.trueTree σ) := by
+  obtain ⟨h00, h10, _⟩ := gramB_holds P f k
+  exact ldlStepB_holdsTP P f σ L h00 h10 (rootB_holds P f k hn) (ldlB_holdsTP P f σ σq hσ hσ0 L)
 
 /-- **The ball expansion holds the true tree**: every ball of `expandB` contains the
 corresponding factor or leaf of exact ffLDL⋆ of `B·B⋆`. -/
 theorem expandB_holdsT (k : RawKey) (hn : P.root = .ntru → ntruB k = true) :
-    (expandB P f k).HoldsT k.trueTree := by
-  obtain ⟨h00, h10, _⟩ := gramB_holds P f k
-  exact ldlStepB_holdsT P f 8 h00 h10 (rootB_holds P f k hn) (ldlB_holdsT P f 8)
+    (expandB P f k).HoldsT k.trueTree :=
+  expandB_holdsTP P f σ512 σ512q σ512_eq (by norm_num [σ512q]) k hn
 
 /-! ## The check -/
 
 variable (n : ℕ)
 
+/-- `storeB_holdsT` at every size `2^(L+1)` and signing `σ = σq ≥ 0`. -/
+theorem storeB_holdsTP (σ : ℝ) (σq : ℚ) (hσ : σ = σq) (hσ0 : 0 ≤ σq) {L : ℕ}
+    (k : RawKey (L + 1)) (hn : ntruB k = true) : (storeB P n k σq).HoldsT (k.trueTree σ) :=
+  BTree.holdsT_lower P.rm n _ _ (expandB_holdsTP P (64 + n) σ σq hσ hσ0 k fun _ => hn)
+
 /-- The rounded ball tree holds the true tree. -/
 theorem storeB_holdsT (k : RawKey) (hn : ntruB k = true) : (storeB P n k).HoldsT k.trueTree :=
-  BTree.holdsT_lower P.rm n _ _ (expandB_holdsT P (64 + n) k fun _ => hn)
+  storeB_holdsTP P n σ512 σ512q σ512_eq (by norm_num [σ512q]) k hn
 
 /-- **The per-key check** at working precision `64 + n` fraction bits: FFT bounds of `f`, `F`;
 `FTree` conditions and conjugate symmetry of the stored tree at 64 fraction bits
 `(storeB P n k).centre`; radii of the rounded stored balls `≤ δq`; rounded leaf balls;
 `fG - gF = q`. That a key passes it (at any `n`; `n = 0`: expansion at 64 fraction bits) is not
 proved for any key (`#eval` runs of `checkFast` on round-3 KAT keys are not kernel proofs). -/
-def check (δq : ℕ → ℚ) (k : RawKey) : Bool :=
-  let T := storeB P n k
+def check {L : ℕ} (δq : ℕ → ℚ) (k : RawKey (L + 1)) (fB : ℚ := 255) (FB : ℚ := 3500)
+    (σlo : ℚ := 1277833697 / 10 ^ 9) (Λq : ℕ → ℚ := lam512q) (σq : ℚ := σ512q) : Bool :=
+  let T := storeB P n k σq
   let C := T.centre
-  allOut 9 (fun o => (fftB P (64 + n) 9 k.f o).normLeB 255) &&
-    allOut 9 (fun o => (fftB P (64 + n) 9 k.F o).normLeB 3500) && C.okB && C.realB &&
-    T.radOkB δq && ntruB k
+  allOut (L + 1) (fun o => (fftB P (64 + n) (L + 1) k.f o).normLeB fB) &&
+    allOut (L + 1) (fun o => (fftB P (64 + n) (L + 1) k.F o).normLeB FB) && C.okB σlo Λq &&
+    C.realB && T.radOkB δq && ntruB k
 
 /-- The parts of a passed check. -/
-structure CheckOk (δq : ℕ → ℚ) (k : RawKey) : Prop where
-  hf : ∀ o, (fftB P (64 + n) 9 k.f o).normLeB 255 = true
-  hF : ∀ o, (fftB P (64 + n) 9 k.F o).normLeB 3500 = true
-  ok : (storeB P n k).centre.okB = true
-  real : (storeB P n k).centre.realB = true
-  rad : (storeB P n k).radOkB δq = true
+structure CheckOk {L : ℕ} (δq : ℕ → ℚ) (k : RawKey (L + 1)) (fB : ℚ := 255) (FB : ℚ := 3500)
+    (σlo : ℚ := 1277833697 / 10 ^ 9) (Λq : ℕ → ℚ := lam512q) (σq : ℚ := σ512q) : Prop where
+  hf : ∀ o, (fftB P (64 + n) (L + 1) k.f o).normLeB fB = true
+  hF : ∀ o, (fftB P (64 + n) (L + 1) k.F o).normLeB FB = true
+  ok : (storeB P n k σq).centre.okB σlo Λq = true
+  real : (storeB P n k σq).centre.realB = true
+  rad : (storeB P n k σq).radOkB δq = true
   ntru : ntruB k = true
 
-theorem check_ok {δq : ℕ → ℚ} {k : RawKey} (h : check P n δq k = true) : CheckOk P n δq k := by
+theorem check_ok {L : ℕ} {δq : ℕ → ℚ} {k : RawKey (L + 1)} {fB FB σlo : ℚ} {Λq : ℕ → ℚ} {σq : ℚ}
+    (h : check P n δq k fB FB σlo Λq σq = true) : CheckOk P n δq k fB FB σlo Λq σq := by
   simp only [check, Bool.and_eq_true] at h
   obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
   exact ⟨(allOut_iff _ _).1 h1, (allOut_iff _ _).1 h2, h3, h4, h5, h6⟩
@@ -458,6 +569,72 @@ theorem check_sound (δq : ℕ → ℚ) (k : RawKey) (h : check P n δq k = true
   refine ⟨?_, ?_⟩
   · rw [e]; exact CTree.real_toFTree _ hB hc.real
   · rw [e]; exact BTree.close_of δq _ _ (storeB_holdsT P n k hc.ntru) hc.rad hB
+
+/-! ## The check at every size -/
+
+/-- Thresholds of `check` and the bounds of `KeyBP` they give: FFT bounds `fB ≤ γf`, `FB ≤ γF`;
+stored leaves `≥ σlo ≥ σl`; node bounds `0 ≤ Λq L ≤ Λ L`; leaf constant `σq = σ ≥ 0` (the
+signing `σ` of the true tree). -/
+structure CheckParams where
+  /-- Bound on the FFT of `f`, decided. -/
+  fB : ℚ
+  /-- Bound on the FFT of `F`, decided. -/
+  FB : ℚ
+  /-- Lower bound on the stored leaves, decided. -/
+  σlo : ℚ
+  /-- Node bounds, decided. -/
+  Λq : ℕ → ℚ
+  /-- Leaf constant of key expansion. -/
+  σq : ℚ
+  /-- `γf` of `KeyBP`. -/
+  γf : ℝ
+  /-- `γF` of `KeyBP`. -/
+  γF : ℝ
+  /-- `σlo` of `KeyBP`. -/
+  σl : ℝ
+  hlo : 12778 / 10000 ≤ σl
+  /-- `Λ` of `KeyBP`. -/
+  Λ : ℕ → ℝ
+  /-- The signing `σ` of the true tree. -/
+  σ : ℝ
+  hf : (fB : ℝ) ≤ γf
+  hF : (FB : ℝ) ≤ γF
+  hσl : σl ≤ σlo
+  hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L
+  hσ : σ = σq
+  hσ0 : 0 ≤ σq
+
+/-- The `KeyBP` of a raw key of size `2^(L+1)` passing `check` at the thresholds of `S`: stored
+tree `storeC` (64 fraction bits). -/
+noncomputable def toKeyBP (S : CheckParams) (δq : ℕ → ℚ) {L : ℕ} (k : RawKey (L + 1))
+    (h : check P n δq k S.fB S.FB S.σlo S.Λq S.σq = true) :
+    KeyBP (L + 1) S.γf S.γF S.σl S.hlo S.Λ where
+  f := k.f
+  F := k.F
+  hf o := (CB.norm_le_of_normLeB (fftB_holds P _ (L + 1) k.f o) ((check_ok P n h).hf o)).trans S.hf
+  hF o := (CB.norm_le_of_normLeB (fftB_holds P _ (L + 1) k.F o) ((check_ok P n h).hF o)).trans S.hF
+  tree := (storeC P n k S.σq).toFTreeP S.hσl S.hΛ
+    (storeB_centreP P n k S.σq ▸ CTree.ok_of_okB _ (check_ok P n h).ok)
+  g := k.g
+  G := k.G
+
+/-- **Soundness of the check at every size**: a raw key of size `2^(L+1)` passing `check` at the
+thresholds of `S` gives a key passing `KeyBP.Good S.σ δ` (`δ j = δq j`): stored tree at 64
+fraction bits `storeC` real and `Close δ` to the true tree (exact ffLDL⋆ of `B·B⋆` at `S.σ`).
+`check … = true` is not proved for any key (`#eval` runs of `checkFast` are not kernel proofs). -/
+theorem check_soundP (S : CheckParams) (δq : ℕ → ℚ) {L : ℕ} (k : RawKey (L + 1))
+    (h : check P n δq k S.fB S.FB S.σlo S.Λq S.σq = true) :
+    (toKeyBP P n S δq k h).Good S.σ (fun j => (δq j : ℝ)) := by
+  have hc := check_ok P n h
+  have hB : (storeB P n k S.σq).centre.Ok S.σlo S.Λq := CTree.ok_of_okB _ hc.ok
+  have e : (toKeyBP P n S δq k h).tree = (storeB P n k S.σq).centre.toFTreeP S.hσl S.hΛ hB :=
+    CTree.toFTreeP_congr S.hσl S.hΛ (storeB_centreP P n k S.σq).symm
+      (storeB_centreP P n k S.σq ▸ hB) hB
+  refine ⟨?_, ?_⟩
+  · rw [e]; exact CTree.real_toFTreeP S.hσl S.hΛ _ hB hc.real
+  · rw [e]
+    exact BTree.close_ofP S.hσl S.hΛ δq _ _ (storeB_holdsTP P n S.σ S.σq S.hσ S.hσ0 k hc.ntru)
+      hc.rad hB
 
 /-! ## Experiments on checked keys -/
 
@@ -503,6 +680,56 @@ theorem pathSum_embed (δq : ℕ → ℚ) {α : Type} {oe : OracleComp (specK P 
     · exact .query_bind (Sum.inl x) _ fun u => ih u
     · exact .query_bind (Sum.inr (kc.1.toGood, kc.2)) _ fun u => ih u
 
+/-! ### At every size -/
+
+/-- Raw keys of size `2^(L+1)` passing `check` at the thresholds of `S`. -/
+def CheckedKeyP (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) : Type :=
+  {k : RawKey (L + 1) // check P n δq k S.fB S.FB S.σlo S.Λq S.σq = true}
+
+/-- A checked key as a key passing `KeyBP.Good S.σ`. -/
+noncomputable def CheckedKeyP.toGood {P : XChoices} {n : ℕ} {S : CheckParams} {δq : ℕ → ℚ}
+    {L : ℕ} (k : CheckedKeyP P n S δq L) :
+    GoodKeyP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ (fun j => (δq j : ℝ)) :=
+  ⟨toKeyBP P n S δq k.1 k.2, check_soundP P n S δq k.1 k.2⟩
+
+/-- Experiment oracles: auxiliary oracles and a signing oracle on (checked raw key, hash). -/
+@[reducible] def specKP (aux : OracleSpec.{0, 0} ιA) (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) :
+    OracleSpec (ιA ⊕ (CheckedKeyP P n S δq L × (Fin (2 ^ (L + 1)) → ℤ))) :=
+  Sum.elim aux fun _ => Sig (L + 1)
+
+/-- One per signing query. -/
+def wKCP (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) :
+    ιA ⊕ (CheckedKeyP P n S δq L × (Fin (2 ^ (L + 1)) → ℤ)) → ℝ :=
+  Sum.elim (fun _ => 0) fun _ => 1
+
+/-- Signing queries on checked raw keys as signing queries on `toGood` keys. -/
+noncomputable def embedImplP (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) :
+    QueryImpl (specKP P n aux S δq L)
+      (OracleComp (specSP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ aux fun j => (δq j : ℝ)))
+  | .inl x => liftM (OracleSpec.query
+      (spec := specSP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ aux fun j => (δq j : ℝ)) (.inl x))
+  | .inr kc => liftM (OracleSpec.query
+      (spec := specSP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ aux fun j => (δq j : ℝ))
+      (.inr (kc.1.toGood, kc.2)))
+
+/-- An experiment on checked raw keys as an experiment on `GoodKeyP`s. -/
+noncomputable def embedP (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) {α : Type}
+    (oe : OracleComp (specKP P n aux S δq L) α) :
+    OracleComp (specSP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ aux fun j => (δq j : ℝ)) α :=
+  simulateQ (embedImplP P n S δq L) oe
+
+theorem pathSum_embedP (S : CheckParams) (δq : ℕ → ℚ) (L : ℕ) {α : Type}
+    {oe : OracleComp (specKP P n aux S δq L) α} {K : ℝ} (h : PathSum (wKCP P n S δq L) oe K) :
+    PathSum (wKP (L + 1) S.γf S.γF S.σl S.hlo S.Λ S.σ _) (embedP P n S δq L oe) K := by
+  induction h with
+  | pure x hS => rw [embedP, simulateQ_pure]; exact .pure x hS
+  | query_bind t k _ ih =>
+    rw [embedP, simulateQ_bind, show simulateQ (embedImplP P n S δq L) (liftM (OracleSpec.query t))
+      = embedImplP P n S δq L t from simulateQ_spec_query (impl := embedImplP P n S δq L) t]
+    rcases t with x | kc
+    · exact .query_bind (Sum.inl x) _ fun u => ih u
+    · exact .query_bind (Sum.inr (kc.1.toGood, kc.2)) _ fun u => ih u
+
 variable {m : Type → Type*} [Monad m] [LawfulMonad m] [EvalDistSemantics m]
     [LawfulEvalDistSemantics m]
 
@@ -514,7 +741,7 @@ included) along every execution, `K·s2B 30.5 δ ≤ 2⁻⁹`, SamplerZ perfect 
 proved: that a given Falcon key passes `check` (not proved for any key: `#eval` runs of `checkFast`
 on round-3 KAT keys are not kernel proofs), at any `δq` and `n`; the word size (key expansion in
 unbounded `Int`, `InRange` not checked); and what `falcon512_fixed_vs_true` does not prove apart
-from `KeyB.Good δ` (`FTree.Real`, `Close δ`, the true leaf range), the tie of the stored tree to
+from `KeyB.Good δ` (`FTreeP.Real`, `Close δ`, the true leaf range), the tie of the stored tree to
 `f, F` (`storeC`) and `fG - gF = q` (given by `check`). -/
 theorem falcon512_fixed_vs_true_checked [∀ t, Countable (aux t)] [∀ t, Nonempty (aux t)]
     (δq : ℕ → ℚ) (ρ : Arith64 (1 / 2 ^ 78))

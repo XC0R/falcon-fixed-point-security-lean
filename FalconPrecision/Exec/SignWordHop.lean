@@ -16,7 +16,8 @@ public import FalconPrecision.Exec.SignEquiv
 the signer whose attempts run on `(i + 64)`-bit words with the executable SamplerZ is the unbounded
 one on the embedded experiment (`execR_word`, from `signX_word` and `clampS_samplerZ`), so the
 composed theorem holds for it unchanged: `falcon512_exec_word_sampler_vs_true` (at `i = 32`: 32.64;
-at `i = 64`: 64.64).
+at `i = 64`: 64.64). On keys passing `check` and `checkRange`:
+`falcon512_exec_word_sampler_vs_true_checked` (`Exec.SampKeyCheck`).
 
 Not proved here: what `falcon512_exec_sampler_vs_true` does not prove; that any key passes
 `checkRange` (computed for round-3 KAT keys, not proved); key expansion `storeC` on words (unbounded

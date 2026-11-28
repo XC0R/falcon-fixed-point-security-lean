@@ -32,8 +32,15 @@ of `Choices` this file proves such equalities on every input under stated condit
   with one attempt (cap 1).
 * Fractional centre (ePrint 2026/2902 Alg. 17, p. 622; Alg. 10 l. 5-7, 25-30, p. 28):
   `targetFracX`, `signXc`.
+* At every size: `SameAttemptN N` (tables at levels `< N`; `SameAttempt.toN`), `signX_congrN`,
+  `accX_congrP`, `signMsgX_congrP`, `tabEqBN`, `signX_rcN`, `fftC_rc_congrN`, `splitC_rc_congrN`,
+  `ldlC_rc_congrP`, `expandC_rc_congrP`, `signMsgX_rcP`, `signMsgX_storeP`, `signMsgX_with_capP`,
+  `signMsgX_cap_addP`, `signLoopX_oneP` (size `2^(L+1)` or `2^logn`, leaf constant `σq`); the
+  Falcon-512 statements above are their instances, the Falcon-1024 ones are in
+  `Exec.SignEquiv1024`.
 
-Not proved here: equalities for pairs that differ (witnesses: `Exec.SignWitness`); key checks for
+Not proved here: equalities for pairs that differ (witnesses: `Exec.SignWitness`,
+`Exec.SignWitness1024`); key checks for
 any key; the theorems for samplers outside `⌊t̄⌋ ± W` other than SamplerZ; key expansion `storeC`
 on words (it runs in unbounded `Int` in both signers: words reduce only the attempt); Compress and
 its restart (spec Alg. 10 l. 10-11), which `signMsgX` does not model. -/
@@ -57,21 +64,36 @@ structure SameAttempt (C1 C2 : Choices) : Prop where
   tw : ∀ L ≤ 8, ∀ o : Out L, (twB C1.x.rc 64 L o).c = (twB C2.x.rc 64 L o).c
   tws : ∀ L ≤ 8, ∀ o : Out L, (twsB C1.x.rc 64 L o).c = (twsB C2.x.rc 64 L o).c
 
-namespace SameAttempt
+/-- `SameAttempt` with the computed tables equal at levels `< N` (Falcon-512: `N = 9`; Falcon-1024:
+`N = 10`). -/
+structure SameAttemptN (N : ℕ) (C1 C2 : Choices) : Prop where
+  rm : C1.x.rm = C2.x.rm
+  word : C1.word = C2.word
+  target : C1.target = C2.target
+  qinv : C1.qinv = C2.qinv
+  rchk : C1.rchk = C2.rchk
+  tw : ∀ L < N, ∀ o : Out L, (twB C1.x.rc 64 L o).c = (twB C2.x.rc 64 L o).c
+  tws : ∀ L < N, ∀ o : Out L, (twsB C1.x.rc 64 L o).c = (twsB C2.x.rc 64 L o).c
 
-variable {C1 C2 : Choices} (h : SameAttempt C1 C2)
+theorem SameAttempt.toN {C1 C2 : Choices} (h : SameAttempt C1 C2) : SameAttemptN 9 C1 C2 :=
+  ⟨h.rm, h.word, h.target, h.qinv, h.rchk, fun L hL => h.tw L (by omega),
+    fun L hL => h.tws L (by omega)⟩
+
+namespace SameAttemptN
+
+variable {N : ℕ} {C1 C2 : Choices} (h : SameAttemptN N C1 C2)
 include h
 
-theorem fftW_eq : ∀ L, L ≤ 9 → ∀ a : Fin (2 ^ L) → ℤ, fftW C1 L a = fftW C2 L a
+theorem fftW_eq : ∀ L, L ≤ N → ∀ a : Fin (2 ^ L) → ℤ, fftW C1 L a = fftW C2 L a
   | 0, _, a => by simp only [fftW, h.word]
   | L + 1, hL, a => by
     simp only [fftW, fftW_eq L (by omega), h.word, h.rm, h.tw L (by omega)]
 
-theorem splitW_eq {L : ℕ} (hL : L ≤ 8) (t : Out (L + 1) → Cx 64) :
+theorem splitW_eq {L : ℕ} (hL : L < N) (t : Out (L + 1) → Cx 64) :
     splitW C1 L t = splitW C2 L t := by
   simp only [splitW, h.word, h.rm, h.tws L hL]
 
-theorem mergeW_eq {L : ℕ} (hL : L ≤ 8) (c0 c1 : Out L → Cx 64) :
+theorem mergeW_eq {L : ℕ} (hL : L < N) (c0 c1 : Out L → Cx 64) :
     mergeW C1 L c0 c1 = mergeW C2 L c0 c1 := by
   simp only [mergeW, h.word, h.rm, h.tw L hL]
 
@@ -79,17 +101,47 @@ theorem updW_eq {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) : updW C1 t0 t1 z ℓ 
   simp only [updW, h.word, h.rm]
 
 theorem ffsX_eq {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) :
-    ∀ {L : ℕ} (T : CTree 64 L), L ≤ 9 → ∀ t0 t1 : Out L → Cx 64,
+    ∀ {L : ℕ} (T : CTree 64 L), L ≤ N → ∀ t0 t1 : Out L → Cx 64,
       ffsX C1 samp T t0 t1 = ffsX C2 samp T t0 t1
   | _, .leaf _, _, _, _ => by simp only [ffsX]
   | _, @CTree.node _ L ℓ T0 T1, hL, t0, t1 => by
     simp only [ffsX, h.rchk, h.splitW_eq (L := L) (by omega), h.mergeW_eq (L := L) (by omega),
       h.updW_eq, ffsX_eq samp T0 (by omega), ffsX_eq samp T1 (by omega)]
 
-theorem targetX_eq (f F c : ZPoly) : targetX C1 f F c = targetX C2 f F c := by
-  have e := h.fftW_eq 9 le_rfl
+theorem targetX_eq {logn : ℕ} (hl : logn ≤ N) (f F c : ZPoly logn) :
+    targetX C1 f F c = targetX C2 f F c := by
+  have e := h.fftW_eq logn hl
   unfold targetX
   rw [e c, e f, e F, h.word, h.rm, h.qinv, h.target]
+
+end SameAttemptN
+
+namespace SameAttempt
+
+variable {C1 C2 : Choices} (h : SameAttempt C1 C2)
+include h
+
+theorem fftW_eq : ∀ L, L ≤ 9 → ∀ a : Fin (2 ^ L) → ℤ, fftW C1 L a = fftW C2 L a :=
+  h.toN.fftW_eq
+
+theorem splitW_eq {L : ℕ} (hL : L ≤ 8) (t : Out (L + 1) → Cx 64) :
+    splitW C1 L t = splitW C2 L t :=
+  h.toN.splitW_eq (by omega) t
+
+theorem mergeW_eq {L : ℕ} (hL : L ≤ 8) (c0 c1 : Out L → Cx 64) :
+    mergeW C1 L c0 c1 = mergeW C2 L c0 c1 :=
+  h.toN.mergeW_eq (by omega) c0 c1
+
+theorem updW_eq {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) : updW C1 t0 t1 z ℓ = updW C2 t0 t1 z ℓ :=
+  h.toN.updW_eq t0 t1 z ℓ
+
+theorem ffsX_eq {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) :
+    ∀ {L : ℕ} (T : CTree 64 L), L ≤ 9 → ∀ t0 t1 : Out L → Cx 64,
+      ffsX C1 samp T t0 t1 = ffsX C2 samp T t0 t1 :=
+  h.toN.ffsX_eq samp
+
+theorem targetX_eq (f F c : ZPoly) : targetX C1 f F c = targetX C2 f F c :=
+  h.toN.targetX_eq le_rfl f F c
 
 end SameAttempt
 
@@ -98,22 +150,50 @@ theorem SameAttempt.of_eq (C1 C2 : Choices) (hrm : C1.x.rm = C2.x.rm) (hw : C1.w
     (hrc : C1.x.rc = C2.x.rc) : SameAttempt C1 C2 :=
   ⟨hrm, hw, ht, hq, hr, fun _ _ _ => by rw [hrc], fun _ _ _ => by rw [hrc]⟩
 
+theorem SameAttemptN.of_eq (N : ℕ) (C1 C2 : Choices) (hrm : C1.x.rm = C2.x.rm)
+    (hw : C1.word = C2.word) (ht : C1.target = C2.target) (hq : C1.qinv = C2.qinv)
+    (hr : C1.rchk = C2.rchk) (hrc : C1.x.rc = C2.x.rc) : SameAttemptN N C1 C2 :=
+  ⟨hrm, hw, ht, hq, hr, fun _ _ _ => by rw [hrc], fun _ _ _ => by rw [hrc]⟩
+
+/-- **The signing attempt depends only on `SameAttemptN` data**, on a stored tree of depth
+`logn ≤ N`. -/
+theorem signX_congrN {N : ℕ} {C1 C2 : Choices} (h : SameAttemptN N C1 C2) {m : Type → Type*}
+    [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) {logn : ℕ} (T : CTree 64 logn) (hl : logn ≤ N)
+    (k : RawKey logn) (c : ZPoly logn) : signX C1 samp T k c = signX C2 samp T k c := by
+  unfold signX
+  rw [h.targetX_eq hl k.f k.F c, h.ffsX_eq samp T hl]
+
 /-- **The signing attempt depends only on `SameAttempt` data.** -/
 theorem signX_congr {C1 C2 : Choices} (h : SameAttempt C1 C2) {m : Type → Type*} [Monad m]
     (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9) (k : RawKey) (c : ZPoly) :
-    signX C1 samp T k c = signX C2 samp T k c := by
-  unfold signX
-  rw [h.targetX_eq k.f k.F c, h.ffsX_eq samp T le_rfl]
+    signX C1 samp T k c = signX C2 samp T k c :=
+  signX_congrN h.toN samp T le_rfl k c
 
-theorem accX_congr {C1 C2 : Choices} (hb : C1.beta2 = C2.beta2) (hi : C1.infB = C2.infB)
-    (k : RawKey) : accX C1 k = accX C2 k := by
-  have e : normOk C1 = normOk C2 := by
+/-- `accX_congr` at every size `2^logn`. -/
+theorem accX_congrP {C1 C2 : Choices} (hb : C1.beta2 = C2.beta2) (hi : C1.infB = C2.infB)
+    {logn : ℕ} (k : RawKey logn) : accX C1 k = accX C2 k := by
+  have e : normOk C1 (logn := logn) = normOk C2 := by
     funext s
     unfold normOk
     rw [hb, hi]
   funext c y
   unfold accX
   rw [e]
+
+theorem accX_congr {C1 C2 : Choices} (hb : C1.beta2 = C2.beta2) (hi : C1.infB = C2.infB)
+    (k : RawKey) : accX C1 k = accX C2 k :=
+  accX_congrP hb hi k
+
+/-- **The signer depends only on its attempts, norm bounds, salt mode and cap**, at every size
+`2^(L+1)` and leaf constant `σq`. -/
+theorem signMsgX_congrP {C1 C2 : Choices} {m : Type → Type*} [Monad m] {S M : Type} {L : ℕ}
+    (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S) (hash : S → M → m (ZPoly (L + 1)))
+    (k : RawKey (L + 1)) (msg : M) (σq : ℚ) (hs : C1.salt = C2.salt) (hcap : C1.cap = C2.cap)
+    (hacc : accX C1 k = accX C2 k)
+    (hatt : signX C1 (sampF C1.samp) (storeC C1.x C1.xn k σq) k =
+      signX C2 (sampF C2.samp) (storeC C2.x C2.xn k σq) k) :
+    signMsgX C1 sampF salt hash k msg σq = signMsgX C2 sampF salt hash k msg σq := by
+  simp only [signMsgX, hs, hcap, hacc, hatt]
 
 /-- **The signer depends only on its attempts, norm bounds, salt mode and cap.** -/
 theorem signMsgX_congr {C1 C2 : Choices} {m : Type → Type*} [Monad m] {S M : Type}
@@ -122,8 +202,8 @@ theorem signMsgX_congr {C1 C2 : Choices} {m : Type → Type*} [Monad m] {S M : T
     (hacc : accX C1 k = accX C2 k)
     (hatt : signX C1 (sampF C1.samp) (storeC C1.x C1.xn k) k =
       signX C2 (sampF C2.samp) (storeC C2.x C2.xn k) k) :
-    signMsgX C1 sampF salt hash k msg = signMsgX C2 sampF salt hash k msg := by
-  simp only [signMsgX, hs, hcap, hacc, hatt]
+    signMsgX C1 sampF salt hash k msg = signMsgX C2 sampF salt hash k msg :=
+  signMsgX_congrP sampF salt hash k msg σ512q hs hcap hacc hatt
 
 /-! ## Words: the signer -/
 
@@ -230,56 +310,126 @@ def tabEqB (rc1 rc2 : RMode) (f : ℕ) : Bool :=
     let s2 := twsB rc2 f L
     allOut L fun o => decide ((t1 o).c = (t2 o).c) && decide ((s1 o).c = (s2 o).c)
 
-theorem tabEq_of_tabEqB {rc1 rc2 : RMode} {f : ℕ} (h : tabEqB rc1 rc2 f = true) {L : ℕ}
-    (hL : L ≤ 8) (o : Out L) :
+/-- `tabEqB` at levels `< N` (`tabEqB = tabEqBN 9`; Falcon-1024: `N = 10`). -/
+def tabEqBN (N : ℕ) (rc1 rc2 : RMode) (f : ℕ) : Bool :=
+  (List.range N).all fun L =>
+    let t1 := twB rc1 f L
+    let t2 := twB rc2 f L
+    let s1 := twsB rc1 f L
+    let s2 := twsB rc2 f L
+    allOut L fun o => decide ((t1 o).c = (t2 o).c) && decide ((s1 o).c = (s2 o).c)
+
+theorem tabEqB_eq_N (rc1 rc2 : RMode) (f : ℕ) : tabEqB rc1 rc2 f = tabEqBN 9 rc1 rc2 f := rfl
+
+theorem tabEq_of_tabEqBN {N : ℕ} {rc1 rc2 : RMode} {f : ℕ} (h : tabEqBN N rc1 rc2 f = true)
+    {L : ℕ} (hL : L < N) (o : Out L) :
     (twB rc1 f L o).c = (twB rc2 f L o).c ∧ (twsB rc1 f L o).c = (twsB rc2 f L o).c := by
-  have h1 := List.all_eq_true.1 h L (List.mem_range.2 (by omega))
+  have h1 := List.all_eq_true.1 h L (List.mem_range.2 hL)
   have h2 := (allOut_iff L _).1 h1 o
   simp only [Bool.and_eq_true, decide_eq_true_eq] at h2
   exact h2
+
+theorem tabEq_of_tabEqB {rc1 rc2 : RMode} {f : ℕ} (h : tabEqB rc1 rc2 f = true) {L : ℕ}
+    (hL : L ≤ 8) (o : Out L) :
+    (twB rc1 f L o).c = (twB rc2 f L o).c ∧ (twsB rc1 f L o).c = (twsB rc2 f L o).c :=
+  tabEq_of_tabEqBN (N := 9) h (by omega) o
+
+/-- **Stored-constant rounding, signing attempt**, on a stored tree of depth `logn ≤ N`: if the
+tables at levels `< N` agree at 64 bits, the attempts of `C` and of `C` with stored constants
+rounded by `rc` are equal on every input. -/
+theorem signX_rcN (C : Choices) (rc : RMode) {N : ℕ} (h : tabEqBN N C.x.rc rc 64 = true)
+    {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) {logn : ℕ} (T : CTree 64 logn)
+    (hl : logn ≤ N) (k : RawKey logn) (c : ZPoly logn) :
+    signX C samp T k c = signX { C with x := { C.x with rc := rc } } samp T k c :=
+  signX_congrN (C1 := C) (C2 := { C with x := { C.x with rc := rc } })
+    ⟨rfl, rfl, rfl, rfl, rfl, fun _ hL o => (tabEq_of_tabEqBN h hL o).1,
+      fun _ hL o => (tabEq_of_tabEqBN h hL o).2⟩ samp T hl k c
 
 /-- **Stored-constant rounding, signing attempt**: if the tables at 64 bits agree, the attempts of
 `C` and of `C` with stored constants rounded by `rc` are equal on every input. -/
 theorem signX_rc (C : Choices) (rc : RMode) (h : tabEqB C.x.rc rc 64 = true) {m : Type → Type*}
     [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9) (k : RawKey) (c : ZPoly) :
     signX C samp T k c = signX { C with x := { C.x with rc := rc } } samp T k c :=
-  signX_congr (C1 := C) (C2 := { C with x := { C.x with rc := rc } })
-    ⟨rfl, rfl, rfl, rfl, rfl, fun _ hL o => (tabEq_of_tabEqB h hL o).1,
-      fun _ hL o => (tabEq_of_tabEqB h hL o).2⟩ samp T k c
+  signX_rcN C rc (N := 9) h samp T le_rfl k c
 
-theorem fftC_rc_congr (P : XChoices) (rc : RMode) (f : ℕ) (h : tabEqB P.rc rc f = true) :
-    ∀ L, L ≤ 9 → ∀ a : Fin (2 ^ L) → ℤ, fftC P f L a = fftC { P with rc := rc } f L a
+theorem fftC_rc_congrN (P : XChoices) (rc : RMode) (f : ℕ) {N : ℕ}
+    (h : tabEqBN N P.rc rc f = true) :
+    ∀ L, L ≤ N → ∀ a : Fin (2 ^ L) → ℤ, fftC P f L a = fftC { P with rc := rc } f L a
   | 0, _, _ => rfl
   | L + 1, hL, a => by
     have ht : ∀ o, (twB P.rc f L o).c = (twB rc f L o).c :=
-      fun o => (tabEq_of_tabEqB h (by omega) o).1
-    simp only [fftC, fftC_rc_congr P rc f h L (by omega), ht]
+      fun o => (tabEq_of_tabEqBN h (by omega) o).1
+    simp only [fftC, fftC_rc_congrN P rc f h L (by omega), ht]
+
+theorem fftC_rc_congr (P : XChoices) (rc : RMode) (f : ℕ) (h : tabEqB P.rc rc f = true) :
+    ∀ L, L ≤ 9 → ∀ a : Fin (2 ^ L) → ℤ, fftC P f L a = fftC { P with rc := rc } f L a :=
+  fftC_rc_congrN P rc f (N := 9) h
+
+theorem splitC_rc_congrN (P : XChoices) (rc : RMode) (f : ℕ) {N : ℕ}
+    (h : tabEqBN N P.rc rc f = true) {L : ℕ} (hL : L < N) (t : Out (L + 1) → Cx f) :
+    splitC P f L t = splitC { P with rc := rc } f L t := by
+  have hs : ∀ o, (twsB P.rc f L o).c = (twsB rc f L o).c :=
+    fun o => (tabEq_of_tabEqBN h hL o).2
+  simp only [splitC, hs]
 
 theorem splitC_rc_congr (P : XChoices) (rc : RMode) (f : ℕ) (h : tabEqB P.rc rc f = true)
     {L : ℕ} (hL : L ≤ 8) (t : Out (L + 1) → Cx f) :
-    splitC P f L t = splitC { P with rc := rc } f L t := by
-  have hs : ∀ o, (twsB P.rc f L o).c = (twsB rc f L o).c :=
-    fun o => (tabEq_of_tabEqB h hL o).2
-  simp only [splitC, hs]
+    splitC P f L t = splitC { P with rc := rc } f L t :=
+  splitC_rc_congrN P rc f (N := 9) h (by omega) t
+
+/-- `ldlC_rc_congr` at levels `< N` and leaf constant `σq`. -/
+theorem ldlC_rc_congrP (P : XChoices) (rc : RMode) (f : ℕ) {N : ℕ}
+    (h : tabEqBN N P.rc rc f = true) (σq : ℚ)
+    (hσ : (Fx.ofRat P.rc σq : Fx f) = Fx.ofRat rc σq) :
+    ∀ L, L < N → ∀ g00 g10 g11 : Out L → Cx f,
+      ldlC P f L g00 g10 g11 σq = ldlC { P with rc := rc } f L g00 g10 g11 σq
+  | 0, _, _, _, _ => by simp only [ldlC, Cx.leafR, hσ]
+  | L + 1, hL, g00, g10, g11 => by
+    simp only [ldlC, ldlStepC, d11C, splitC_rc_congrN P rc f h (L := L) (by omega),
+      ldlC_rc_congrP P rc f h σq hσ L (by omega)]
 
 theorem ldlC_rc_congr (P : XChoices) (rc : RMode) (f : ℕ) (h : tabEqB P.rc rc f = true)
     (hσ : (Fx.ofRat P.rc σ512q : Fx f) = Fx.ofRat rc σ512q) :
     ∀ L, L ≤ 8 → ∀ g00 g10 g11 : Out L → Cx f,
-      ldlC P f L g00 g10 g11 = ldlC { P with rc := rc } f L g00 g10 g11
-  | 0, _, _, _, _ => by simp only [ldlC, Cx.leafR, hσ]
-  | L + 1, hL, g00, g10, g11 => by
-    simp only [ldlC, ldlStepC, d11C, splitC_rc_congr P rc f h (L := L) (by omega),
-      ldlC_rc_congr P rc f h hσ L (by omega)]
+      ldlC P f L g00 g10 g11 = ldlC { P with rc := rc } f L g00 g10 g11 :=
+  fun L hL => ldlC_rc_congrP P rc f (N := 9) h σ512q hσ L (by omega)
+
+/-- Key expansion at size `2^(L+1)` and leaf constant `σq` reads `rc` only through the tables at
+levels `≤ L` at `f` bits and the stored `σq`. -/
+theorem expandC_rc_congrP (P : XChoices) (rc : RMode) (f : ℕ) {L : ℕ}
+    (h : tabEqBN (L + 1) P.rc rc f = true) (σq : ℚ)
+    (hσ : (Fx.ofRat P.rc σq : Fx f) = Fx.ofRat rc σq) (k : RawKey (L + 1)) :
+    expandC P f k σq = expandC { P with rc := rc } f k σq := by
+  have e1 := fftC_rc_congrN P rc f h (L + 1) le_rfl
+  have e2 := splitC_rc_congrN P rc f h (L := L) (by omega)
+  have e3 := ldlC_rc_congrP P rc f h σq hσ L (by omega)
+  obtain ⟨rm, rc0, dm, root⟩ := P
+  cases root <;> simp only [expandC, gramC, ldlStepC, d11C, e1, e2, e3]
 
 /-- Key expansion reads `rc` only through the tables at `f` bits and the stored `σ`. -/
 theorem expandC_rc_congr (P : XChoices) (rc : RMode) (f : ℕ) (h : tabEqB P.rc rc f = true)
     (hσ : (Fx.ofRat P.rc σ512q : Fx f) = Fx.ofRat rc σ512q) (k : RawKey) :
-    expandC P f k = expandC { P with rc := rc } f k := by
-  have e1 := fftC_rc_congr P rc f h 9 le_rfl
-  have e2 := splitC_rc_congr P rc f h (L := 8) le_rfl
-  have e3 := ldlC_rc_congr P rc f h hσ 8 le_rfl
-  obtain ⟨rm, rc0, dm, root⟩ := P
-  cases root <;> simp only [expandC, gramC, ldlStepC, d11C, e1, e2, e3]
+    expandC P f k = expandC { P with rc := rc } f k :=
+  expandC_rc_congrP P rc f (L := 8) h σ512q hσ k
+
+/-- **Stored-constant rounding, the signer**, at size `2^(L+1)` and leaf constant `σq`: if the
+tables at levels `≤ L` agree at `64` and at `64 + xn` bits and the stored `σq` agrees, `C` and `C`
+with stored constants rounded by `rc` give the same output on every key, message, salt source,
+hash and sampler family. -/
+theorem signMsgX_rcP (C : Choices) (rc : RMode) {L : ℕ}
+    (h64 : tabEqBN (L + 1) C.x.rc rc 64 = true) (hx : tabEqBN (L + 1) C.x.rc rc (64 + C.xn) = true)
+    (σq : ℚ) (hσ : (Fx.ofRat C.x.rc σq : Fx (64 + C.xn)) = Fx.ofRat rc σq) {m : Type → Type*}
+    [Monad m] {S M : Type} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S)
+    (hash : S → M → m (ZPoly (L + 1))) (k : RawKey (L + 1)) (msg : M) :
+    signMsgX C sampF salt hash k msg σq =
+      signMsgX { C with x := { C.x with rc := rc } } sampF salt hash k msg σq := by
+  refine signMsgX_congrP sampF salt hash k msg σq rfl rfl (accX_congrP rfl rfl k) ?_
+  have e : storeC C.x C.xn k σq = storeC { C.x with rc := rc } C.xn k σq := by
+    simp only [storeC]
+    rw [expandC_rc_congrP C.x rc (64 + C.xn) hx σq hσ k]
+  rw [e]
+  funext c
+  exact signX_rcN C rc h64 _ _ le_rfl k c
 
 /-- **Stored-constant rounding, the signer**: if the tables agree at `64` and at `64 + xn` bits
 and the stored `σ` agrees, `C` and `C` with stored constants rounded by `rc` give the same output
@@ -290,14 +440,8 @@ theorem signMsgX_rc (C : Choices) (rc : RMode) (h64 : tabEqB C.x.rc rc 64 = true
     [Monad m] {S M : Type} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S)
     (hash : S → M → m ZPoly) (k : RawKey) (msg : M) :
     signMsgX C sampF salt hash k msg =
-      signMsgX { C with x := { C.x with rc := rc } } sampF salt hash k msg := by
-  refine signMsgX_congr sampF salt hash k msg rfl rfl (accX_congr rfl rfl k) ?_
-  have e : storeC C.x C.xn k = storeC { C.x with rc := rc } C.xn k := by
-    simp only [storeC]
-    rw [expandC_rc_congr C.x rc (64 + C.xn) hx hσ k]
-  rw [e]
-  funext c
-  exact signX_rc C rc h64 _ _ k c
+      signMsgX { C with x := { C.x with rc := rc } } sampF salt hash k msg :=
+  signMsgX_rcP C rc (L := 8) h64 hx σ512q hσ sampF salt hash k msg
 
 /-! ## Stored trees -/
 
@@ -317,6 +461,22 @@ theorem CTree.eq_of_eqB {f : ℕ} : {L : ℕ} → (T T' : CTree f L) → T.eqB T
     have hℓ : ℓ = ℓ' := funext fun o => of_decide_eq_true ((allOut_iff _ _).1 h1 o)
     rw [hℓ, eq_of_eqB T0 T0' h2, eq_of_eqB T1 T1' h3]
 
+/-- **Key expansion choices**, at size `2^(L+1)` and leaf constant `σq`: two choice points that
+differ only in key expansion (`dm`, `root`, `xn`) give the same signer output on every message, salt
+source, hash and sampler family for a key whose stored trees are equal (decided by `CTree.eqB`). -/
+theorem signMsgX_storeP (C : Choices) (P : XChoices) (n : ℕ) (hrm : P.rm = C.x.rm)
+    (hrc : P.rc = C.x.rc) {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ)
+    (hT : (storeC C.x C.xn k σq).eqB (storeC P n k σq) = true) {m : Type → Type*} [Monad m]
+    {S M : Type} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S)
+    (hash : S → M → m (ZPoly (L + 1))) (msg : M) :
+    signMsgX C sampF salt hash k msg σq =
+      signMsgX { C with x := P, xn := n } sampF salt hash k msg σq := by
+  refine signMsgX_congrP sampF salt hash k msg σq rfl rfl (accX_congrP rfl rfl k) ?_
+  rw [CTree.eq_of_eqB _ _ hT]
+  funext c
+  exact signX_congrN (C1 := C) (C2 := { C with x := P, xn := n })
+    (SameAttemptN.of_eq (L + 1) _ _ hrm.symm rfl rfl rfl rfl hrc.symm) _ _ le_rfl k c
+
 /-- **Key expansion choices**: two choice points that differ only in key expansion (`dm`, `root`,
 `xn`) give the same signer output on every message, salt source, hash and sampler family for a
 key whose stored trees are equal (decided by `CTree.eqB`). -/
@@ -325,12 +485,8 @@ theorem signMsgX_store (C : Choices) (P : XChoices) (n : ℕ) (hrm : P.rm = C.x.
     {m : Type → Type*} [Monad m] {S M : Type} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ)
     (salt : m S) (hash : S → M → m ZPoly) (msg : M) :
     signMsgX C sampF salt hash k msg =
-      signMsgX { C with x := P, xn := n } sampF salt hash k msg := by
-  refine signMsgX_congr sampF salt hash k msg rfl rfl (accX_congr rfl rfl k) ?_
-  rw [CTree.eq_of_eqB _ _ hT]
-  funext c
-  exact signX_congr (C1 := C) (C2 := { C with x := P, xn := n })
-    (SameAttempt.of_eq _ _ hrm.symm rfl rfl rfl rfl hrc.symm) _ _ k c
+      signMsgX { C with x := P, xn := n } sampF salt hash k msg :=
+  signMsgX_storeP C P n hrm hrc k σ512q hT sampF salt hash msg
 
 /-! ## Restart loop and salt -/
 
@@ -347,19 +503,44 @@ theorem loopR_add {m : Type → Type*} [Monad m] [LawfulMonad m] {γ β : Type} 
     | some b => simp
     | none => exact loopR_add att acc j N
 
+/-- `signMsgX_with_cap` at size `2^(L+1)` and leaf constant `σq`. -/
+theorem signMsgX_with_capP (C : Choices) (a : ℕ) {m : Type → Type*} [Monad m] {S M : Type}
+    {L : ℕ} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S)
+    (hash : S → M → m (ZPoly (L + 1))) (k : RawKey (L + 1)) (msg : M) (σq : ℚ) :
+    signMsgX { C with cap := a } sampF salt hash k msg σq =
+      signLoopX C.salt salt hash (signX C (sampF C.samp) (storeC C.x C.xn k σq) k) (accX C k)
+        msg a := by
+  have e : signX { C with cap := a } (sampF C.samp) (storeC C.x C.xn k σq) k =
+      signX C (sampF C.samp) (storeC C.x C.xn k σq) k :=
+    funext fun c => signX_congrN (C1 := { C with cap := a }) (C2 := C)
+      (SameAttemptN.of_eq (L + 1) _ _ rfl rfl rfl rfl rfl rfl) _ _ le_rfl k c
+  have ea : accX { C with cap := a } k = accX C k := accX_congrP rfl rfl k
+  simp only [signMsgX]
+  rw [e, ea]
+
 theorem signMsgX_with_cap (C : Choices) (a : ℕ) {m : Type → Type*} [Monad m] {S M : Type}
     (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S) (hash : S → M → m ZPoly)
     (k : RawKey) (msg : M) :
     signMsgX { C with cap := a } sampF salt hash k msg =
       signLoopX C.salt salt hash (signX C (sampF C.samp) (storeC C.x C.xn k) k) (accX C k) msg
-        a := by
-  have e : signX { C with cap := a } (sampF C.samp) (storeC C.x C.xn k) k =
-      signX C (sampF C.samp) (storeC C.x C.xn k) k :=
-    funext fun c => signX_congr (C1 := { C with cap := a }) (C2 := C)
-      (SameAttempt.of_eq _ _ rfl rfl rfl rfl rfl rfl) _ _ k c
-  have ea : accX { C with cap := a } k = accX C k := accX_congr rfl rfl k
-  simp only [signMsgX]
-  rw [e, ea]
+        a :=
+  signMsgX_with_capP C a sampF salt hash k msg σ512q
+
+/-- **Restart cap**, at size `2^(L+1)` and leaf constant `σq`: with a fresh salt per attempt, the
+signer capped at `N + j` attempts is the signer capped at `N`, followed, when it fails, by the
+signer capped at `j`. -/
+theorem signMsgX_cap_addP (C : Choices) (hs : C.salt = .perAttempt) {m : Type → Type*} [Monad m]
+    [LawfulMonad m] {S M : Type} {L : ℕ} (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ)
+    (salt : m S) (hash : S → M → m (ZPoly (L + 1))) (k : RawKey (L + 1)) (msg : M) (σq : ℚ)
+    (N j : ℕ) :
+    signMsgX { C with cap := N + j } sampF salt hash k msg σq =
+      signMsgX { C with cap := N } sampF salt hash k msg σq >>= fun r =>
+        r.elim (signMsgX { C with cap := j } sampF salt hash k msg σq)
+          fun b => pure (some b) := by
+  rw [signMsgX_with_capP, signMsgX_with_capP, signMsgX_with_capP]
+  rw [hs]
+  simp only [signLoopX]
+  exact loopR_add (m := m) _ _ j N
 
 /-- **Restart cap**: with a fresh salt per attempt, the signer capped at `N + j` attempts is the
 signer capped at `N`, followed, when it fails, by the signer capped at `j`. -/
@@ -368,51 +549,59 @@ theorem signMsgX_cap_add (C : Choices) (hs : C.salt = .perAttempt) {m : Type →
     (hash : S → M → m ZPoly) (k : RawKey) (msg : M) (N j : ℕ) :
     signMsgX { C with cap := N + j } sampF salt hash k msg =
       signMsgX { C with cap := N } sampF salt hash k msg >>= fun r =>
-        r.elim (signMsgX { C with cap := j } sampF salt hash k msg) fun b => pure (some b) := by
-  rw [signMsgX_with_cap, signMsgX_with_cap, signMsgX_with_cap]
-  rw [hs]
-  simp only [signLoopX]
-  exact loopR_add (m := m) _ _ j N
+        r.elim (signMsgX { C with cap := j } sampF salt hash k msg) fun b => pure (some b) :=
+  signMsgX_cap_addP C hs sampF salt hash k msg σ512q N j
 
-/-- **Salt per attempt or reused, one attempt**: with cap 1 they are equal, in every lawful
-monad. -/
-theorem signLoopX_one {m : Type → Type*} [Monad m] [LawfulMonad m] {S M β : Type} (salt : m S)
-    (hash : S → M → m ZPoly) (att : ZPoly → m (Option (ZPoly × ZPoly)))
-    (acc : ZPoly → Option (ZPoly × ZPoly) → Option β) (msg : M) :
+/-- **Salt per attempt or reused, one attempt**, at every size `2^logn`: with cap 1 they are
+equal, in every lawful monad. -/
+theorem signLoopX_oneP {m : Type → Type*} [Monad m] [LawfulMonad m] {S M β : Type} {logn : ℕ}
+    (salt : m S) (hash : S → M → m (ZPoly logn))
+    (att : ZPoly logn → m (Option (ZPoly logn × ZPoly logn)))
+    (acc : ZPoly logn → Option (ZPoly logn × ZPoly logn) → Option β) (msg : M) :
     signLoopX .reused salt hash att acc msg 1 = signLoopX .perAttempt salt hash att acc msg 1 := by
   simp only [signLoopX, loopR, map_bind, bind_assoc, bind_map_left]
   refine congrArg (salt >>= ·) (funext fun s => congrArg (hash s msg >>= ·)
     (funext fun c => congrArg (att c >>= ·) (funext fun y => ?_)))
   cases acc c y <;> simp
 
+/-- **Salt per attempt or reused, one attempt**: with cap 1 they are equal, in every lawful
+monad. -/
+theorem signLoopX_one {m : Type → Type*} [Monad m] [LawfulMonad m] {S M β : Type} (salt : m S)
+    (hash : S → M → m ZPoly) (att : ZPoly → m (Option (ZPoly × ZPoly)))
+    (acc : ZPoly → Option (ZPoly × ZPoly) → Option β) (msg : M) :
+    signLoopX .reused salt hash att acc msg 1 = signLoopX .perAttempt salt hash att acc msg 1 :=
+  signLoopX_oneP salt hash att acc msg
+
 /-! ## Fractional centre (ePrint 2026/2902 Alg. 17, p. 622) -/
 
 /-- The residue of `x` modulo `q` in `[-q/2, q/2)`. -/
 def modqC (x : ℤ) : ℤ := if 2 * (x % 12289) < 12289 then x % 12289 else x % 12289 - 12289
 
-/-- `qt = (-c·F, c·f)` in `ℤ[x]/(x⁵¹² + 1)` (2026/2902 Def. A.13, p. 74). -/
-def qtX (k : RawKey) (c : ZPoly) : ZPoly × ZPoly :=
+/-- `qt = (-c·F, c·f)` in `ℤ[x]/(x^(2^logn) + 1)` (2026/2902 Def. A.13, p. 74). -/
+def qtX {logn : ℕ} (k : RawKey logn) (c : ZPoly logn) : ZPoly logn × ZPoly logn :=
   (fun i => -ncoef c k.F i, fun i => ncoef c k.f i)
 
 /-- The integer part `t_int = (qt - qt_frac)/q` (Alg. 17 l. 5). -/
-def tIntX (k : RawKey) (c : ZPoly) : ZPoly × ZPoly :=
+def tIntX {logn : ℕ} (k : RawKey logn) (c : ZPoly logn) : ZPoly logn × ZPoly logn :=
   ((fun i => ((qtX k c).1 i - modqC ((qtX k c).1 i)) / 12289),
     fun i => ((qtX k c).2 i - modqC ((qtX k c).2 i)) / 12289)
 
 /-- The fractional centre `FFT(qt_frac) ⊗ 1/q` (Alg. 17 l. 7, 12), each result reduced. -/
-def targetFracX (C : Choices) (k : RawKey) (c : ZPoly) : (Out 9 → Cx 64) × (Out 9 → Cx 64) :=
+def targetFracX {logn : ℕ} (C : Choices) (k : RawKey logn) (c : ZPoly logn) :
+    (Out logn → Cx 64) × (Out logn → Cx 64) :=
   let w := wordFn C.word
-  let f0 := fftW C 9 fun i => modqC ((qtX k c).1 i)
-  let f1 := fftW C 9 fun i => modqC ((qtX k c).2 i)
-  (memo 9 fun o => (divqX C.x.rm C.qinv (f0 o)).wr w,
-    memo 9 fun o => (divqX C.x.rm C.qinv (f1 o)).wr w)
+  let f0 := fftW C logn fun i => modqC ((qtX k c).1 i)
+  let f1 := fftW C logn fun i => modqC ((qtX k c).2 i)
+  (memo logn fun o => (divqX C.x.rm C.qinv (f0 o)).wr w,
+    memo logn fun o => (divqX C.x.rm C.qinv (f1 o)).wr w)
 
 /-- **A signing attempt with the centre handling `C.samp.centre`**: `plain` is `signX`;
 `fractional` samples `z'` at the fractional centre and returns `t_int + z'` exactly, unreduced
 (2026/2902 Alg. 10 l. 5-7, 25-30, p. 28, reduces the sum mod `q`; the signature does not see that
 reduction). -/
-def signXc (C : Choices) {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ)
-    (T : CTree 64 9) (k : RawKey) (c : ZPoly) : m (Option (ZPoly × ZPoly)) :=
+def signXc (C : Choices) {m : Type → Type*} [Monad m] {logn : ℕ} (samp : Fx 64 → Fx 64 → m ℤ)
+    (T : CTree 64 logn) (k : RawKey logn) (c : ZPoly logn) :
+    m (Option (ZPoly logn × ZPoly logn)) :=
   match C.samp.centre with
   | .plain => signX C samp T k c
   | .fractional =>

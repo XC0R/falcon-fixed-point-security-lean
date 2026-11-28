@@ -4,8 +4,8 @@ title: "FalconPrecision: kernel-checked security of fixed-point Falcon signing"
 authors:
   - alias: XC0R
 license: Apache-2.0
-version: 0.5.0
-date-released: "2026-11-24"
+version: 0.6.0
+date-released: "2026-11-28"
 repository-code: "https://github.com/XC0R/falcon-fixed-point-security-lean"
 references:
   - type: article
@@ -21,8 +21,31 @@ references:
         given-names: Thomas
     journal: "IACR Cryptology ePrint Archive"
     year: 2026
-    notes: "Report 2026/1531"
+    notes: "Report 2026/1531; extended version of the CRYPTO 2026 paper"
     url: "https://eprint.iacr.org/2026/1531"
+  - type: conference-paper
+    title: "Toward a Secure Fixed-Point Implementation of the Falcon Signature Scheme"
+    authors:
+      - family-names: "De Almeida Braga"
+        given-names: Daniel
+      - family-names: Fouque
+        given-names: Pierre-Alain
+      - family-names: Lachguel
+        given-names: Bachir
+      - family-names: Prest
+        given-names: Thomas
+    collection-title: "Advances in Cryptology – CRYPTO 2026"
+    collection-type: proceedings
+    conference:
+      name: "CRYPTO 2026"
+    publisher:
+      name: "Springer Nature Switzerland"
+    issn: "0302-9743"
+    notes: "Lecture Notes in Computer Science"
+    start: 166
+    end: 197
+    year: 2026
+    doi: "10.1007/978-3-032-35377-1_6"
   - type: article
     title: "Flying, Not Floating: Precise Fixed-Point Falcon on Embedded Processors"
     authors:
@@ -36,6 +59,15 @@ references:
     year: 2026
     notes: "Report 2026/2431"
     url: "https://eprint.iacr.org/2026/2431"
+  - type: article
+    title: "Bounds of Falcon's Fast Fourier Sampler with Fixed-Point Arithmetic (Draft v0.1)"
+    authors:
+      - family-names: Hwang
+        given-names: Vincent
+    journal: "IACR Cryptology ePrint Archive"
+    year: 2026
+    notes: "Report 2026/2902"
+    url: "https://eprint.iacr.org/2026/2902"
   - type: software
     title: VCVio
     authors:

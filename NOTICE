@@ -3,8 +3,8 @@ FalconPrecision
 This repository is licensed under the Apache License 2.0 (LICENSE). It contains values from third-party data,
 described below.
 
-Falcon round-3 known-answer-test values
-=======================================
+Falcon round-3 known-answer-test values and SamplerZ trace
+==========================================================
 
 Source: the file `falcon512-KAT.rsp` of the Falcon round-3 submission package (specification v1.2), by the Falcon
 Project, as posted by NIST and on falcon-sign.info:
@@ -27,8 +27,37 @@ Files of this repository that contain values from it:
   evidence/vectors/d127/e0.json, evidence/vectors/d127/e70.json: the polynomials f, g, F, G decoded from `sk` and
   s2 decoded from `sm` of entries 0, 70 and 27, and values computed from these entries.
 
+The recorded outputs evidence/key-check-d45/*.out, evidence/key-check-d127/*.out,
+evidence/key-check-d127-xn32/survey.out and evidence/vectors/*/*.out contain per-key results and diagnostic values
+(check outcomes, radius exponents, bounds) computed from these entries, and no values copied from the file.
+
 The run files that scripts/gen_evidence_runs.py writes to `runs/` contain values of all 100 entries; they are
 written from the reader's own copy of the file and are not part of this repository.
+
+The same archives contain `falcon1024-KAT.rsp` (1757286 bytes, 100 entries), sha256
+036a0bf5260573cec44977284dfef756cd1143db9961b981bd1fb55828acb20d in both. Files of this repository that contain
+values from it:
+
+- FalconPrecision/Exec/WitnessData1024.lean: `sk` of entries 0 and 2, and the salt and message bytes of `sm` of
+  entries 0, 2 and 70, as hexadecimal strings copied from the file, and values computed from entries 0, 2 and 70.
+- evidence/vectors-1024/d43/e0.json, e2.json, e11.json, evidence/vectors-1024/d127/e0.json, e2.json, e11.json: the
+  polynomials f, g, F, G decoded from `sk` and s2 decoded from `sm` of entries 0, 2 and 11, and values computed from
+  these entries.
+
+The recorded outputs evidence/key-check-1024-d43/*.out, evidence/key-check-1024-d127/*.out,
+evidence/range-1024/*.out and evidence/vectors-1024/*/*.out contain per-key results and diagnostic values (check
+outcomes, radius exponents, bounds) computed from these entries, and no values copied from the file.
+
+The run files that scripts/gen_evidence_runs.py writes from it to `runs/kat1024-entries/`,
+`runs/key-check-1024-d43/`, `runs/key-check-1024-d127/` and `runs/range-1024/` contain values of all 100 entries and
+values computed from them, and those it writes to `runs/vectors-1024/` the `msg`, `pk`, `sk` and `sm` of entries 0, 2
+and 11, written from the reader's own copy.
+
+The same archives contain `Supporting_Documentation/additional/test-vector-sampler-falcon1024.txt` (2548902 bytes),
+sha256 c07bc528284590a10d3d84e85446214107426bb7943f4e4aac9996ea93fd92cd in both. No file of this repository contains
+values from it except the number of random bytes of each SamplerZ call in evidence/sampler-1024/*.out; the run files
+that scripts/gen_evidence_runs.py writes from it to `runs/sampler-1024/` contain its SamplerZ inputs, random values
+and outputs, written from the reader's own copy.
 
 Falcon specification test vectors
 =================================

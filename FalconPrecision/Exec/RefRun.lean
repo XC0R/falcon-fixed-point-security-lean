@@ -19,7 +19,10 @@ every intermediate in a `RunT V L`; `sign` adds the FFTs and the target (`SignT 
 the answers in call order.
 
 `VSim O P R`: every operation of `O` and `P` preserves `R`. `signT_sim`: the traces of two runs on
-`R`-related trees and inputs are `R`-related entry by entry (`SignT.Rel`).
+`R`-related trees and inputs are `R`-related entry by entry (`SignT.Rel`). `VSimN N O P R`, with the
+tables at levels `< N`, and `signT_simN`: the same at size `2^N` (`VSim` is `VSimN 9`: `VSim.toN`,
+`VSimN.toVSim`; the Falcon-512 lemmas are their instances). `SignT.Rel.impP`, `.monoP`, `.compP`,
+`.map_leftP`, `ofArr_targetAP`: the relation and array lemmas at every size.
 
 `fftA`, `splitA`, `mergeA`, `updA`, `targetA`, `runA`: the same on arrays (`toArr`, `ofArr`;
 `memo` is not shared by the compiler, `Exec.CheckFast`), proved equal (`ofArr_fftA`, …,
@@ -62,13 +65,13 @@ inductive RunT (V : Type) : ℕ → Type
       (r0 : RunT V L) (zh0 : Out (L + 1) → V) : RunT V (L + 1)
 
 /-- The intermediates of a signing attempt: FFTs of `c`, `f`, `F`, the target, ffSampling. -/
-structure SignT (V : Type) where
-  ch : Out 9 → V
-  fh : Out 9 → V
-  Fh : Out 9 → V
-  t0 : Out 9 → V
-  t1 : Out 9 → V
-  run : RunT V 9
+structure SignT (V : Type) (logn : ℕ := 9) where
+  ch : Out logn → V
+  fh : Out logn → V
+  Fh : Out logn → V
+  t0 : Out logn → V
+  t1 : Out logn → V
+  run : RunT V logn
 
 /-- The answers of a run in call order: `T1` before `T0`, `z0` before `z1`. -/
 def tapeOf : (L : ℕ) → (Fin (2 ^ L) → ℤ) → (Fin (2 ^ L) → ℤ) → List ℤ
@@ -117,14 +120,15 @@ def upd {L : ℕ} (t0 t1 z ℓ : Out L → V) : Out L → V :=
   memo L fun o => O.add (t0 o) (O.mul (O.sub (t1 o) (z o)) (ℓ o))
 
 /-- The target from `ĉ, f̂, F̂` in the order `τ`. -/
-def target (τ : Target) (ch fh Fh : Out 9 → V) : (Out 9 → V) × (Out 9 → V) :=
+def target {logn : ℕ} (τ : Target) (ch fh Fh : Out logn → V) :
+    (Out logn → V) × (Out logn → V) :=
   match τ with
   | .scaleFirst =>
-    let cq := memo 9 fun o => O.divq (ch o)
-    (memo 9 fun o => O.mul (O.neg (cq o)) (Fh o), memo 9 fun o => O.mul (cq o) (fh o))
+    let cq := memo logn fun o => O.divq (ch o)
+    (memo logn fun o => O.mul (O.neg (cq o)) (Fh o), memo logn fun o => O.mul (cq o) (fh o))
   | .multiplyFirst =>
-    (memo 9 fun o => O.divq (O.neg (O.mul (ch o) (Fh o))),
-      memo 9 fun o => O.divq (O.mul (ch o) (fh o)))
+    (memo logn fun o => O.divq (O.neg (O.mul (ch o) (Fh o))),
+      memo logn fun o => O.divq (O.mul (ch o) (fh o)))
 
 end VOps
 
@@ -153,10 +157,11 @@ def run : {L : ℕ} → GTree V L → (t0 t1 : Out L → V) → (z0 z1 : Fin (2 
 
 /-- **The conditioned signing attempt**: FFTs of `c, f, F`, the target in the order `τ`, then
 `run` on `T` with answers `(z0, z1)`. -/
-def sign (τ : Target) (T : GTree V 9) (f F c z0 z1 : ZPoly) : SignT V :=
-  let ch := O.fft 9 c
-  let fh := O.fft 9 f
-  let Fh := O.fft 9 F
+def sign {logn : ℕ} (τ : Target) (T : GTree V logn) (f F c z0 z1 : ZPoly logn) :
+    SignT V logn :=
+  let ch := O.fft logn c
+  let fh := O.fft logn f
+  let Fh := O.fft logn F
   let t := O.target τ ch fh Fh
   ⟨ch, fh, Fh, t.1, t.2, O.run T t.1 t.2 z0 z1⟩
 
@@ -220,19 +225,25 @@ theorem ofArr_updA {L : ℕ} (t0 t1 z ℓ : Out L → V) :
   simp only [updA, upd, ofArr_toArr, memo_eq]
 
 /-- `target` as arrays. -/
-def targetA (τ : Target) (ch fh Fh : Out 9 → V) : Array V × Array V :=
+def targetA {logn : ℕ} (τ : Target) (ch fh Fh : Out logn → V) : Array V × Array V :=
   match τ with
   | .scaleFirst =>
-    let cq := ofArr 9 (toArr 9 fun o => O.divq (ch o))
-    (toArr 9 fun o => O.mul (O.neg (cq o)) (Fh o), toArr 9 fun o => O.mul (cq o) (fh o))
+    let cq := ofArr logn (toArr logn fun o => O.divq (ch o))
+    (toArr logn fun o => O.mul (O.neg (cq o)) (Fh o), toArr logn fun o => O.mul (cq o) (fh o))
   | .multiplyFirst =>
-    (toArr 9 fun o => O.divq (O.neg (O.mul (ch o) (Fh o))),
-      toArr 9 fun o => O.divq (O.mul (ch o) (fh o)))
+    (toArr logn fun o => O.divq (O.neg (O.mul (ch o) (Fh o))),
+      toArr logn fun o => O.divq (O.mul (ch o) (fh o)))
+
+/-- `ofArr_targetA` at every size. -/
+theorem ofArr_targetAP {logn : ℕ} (τ : Target) (ch fh Fh : Out logn → V) :
+    ofArr logn (O.targetA τ ch fh Fh).1 = (O.target τ ch fh Fh).1 ∧
+      ofArr logn (O.targetA τ ch fh Fh).2 = (O.target τ ch fh Fh).2 := by
+  cases τ <;> simp only [targetA, target, ofArr_toArr, memo_eq, and_self]
 
 theorem ofArr_targetA (τ : Target) (ch fh Fh : Out 9 → V) :
     ofArr 9 (O.targetA τ ch fh Fh).1 = (O.target τ ch fh Fh).1 ∧
-      ofArr 9 (O.targetA τ ch fh Fh).2 = (O.target τ ch fh Fh).2 := by
-  cases τ <;> simp only [targetA, target, ofArr_toArr, memo_eq, and_self]
+      ofArr 9 (O.targetA τ ch fh Fh).2 = (O.target τ ch fh Fh).2 :=
+  O.ofArr_targetAP τ ch fh Fh
 
 /-- `run` on arrays: each split, merge and line-10 update computed once. -/
 def runA : {L : ℕ} → GTree V L → (t0 t1 : Out L → V) → (z0 z1 : Fin (2 ^ L) → ℤ) → RunT V L
@@ -272,7 +283,7 @@ def RunT.Rel (R : V → W → Prop) : {L : ℕ} → RunT V L → RunT W L → Pr
       R (t0u o) (t0u' o) ∧ R (zh0 o) (zh0' o)) ∧ Rel R r1 r1' ∧ Rel R r0 r0'
 
 /-- `R` at every entry. -/
-def SignT.Rel (R : V → W → Prop) (A : SignT V) (B : SignT W) : Prop :=
+def SignT.Rel {logn : ℕ} (R : V → W → Prop) (A : SignT V logn) (B : SignT W logn) : Prop :=
   (∀ o, R (A.ch o) (B.ch o) ∧ R (A.fh o) (B.fh o) ∧ R (A.Fh o) (B.Fh o) ∧ R (A.t0 o) (B.t0 o) ∧
     R (A.t1 o) (B.t1 o)) ∧ A.run.Rel R B.run
 
@@ -284,8 +295,8 @@ def RunT.allB (p : V → Bool) : {L : ℕ} → RunT V L → Bool
       p (zh0 o)) && r1.allB p && r0.allB p
 
 /-- `p` at every entry, decided. -/
-def SignT.allB (p : V → Bool) (A : SignT V) : Bool :=
-  allOut 9 (fun o => p (A.ch o) && p (A.fh o) && p (A.Fh o) && p (A.t0 o) && p (A.t1 o)) &&
+def SignT.allB {logn : ℕ} (p : V → Bool) (A : SignT V logn) : Bool :=
+  allOut logn (fun o => p (A.ch o) && p (A.fh o) && p (A.Fh o) && p (A.t0 o) && p (A.t1 o)) &&
     A.run.allB p
 
 /-- Every entry mapped by `g`. -/
@@ -296,7 +307,7 @@ def RunT.map (g : V → W) : {L : ℕ} → RunT V L → RunT W L
       (fun o => g (zh1 o)) (fun o => g (t0u o)) (r0.map g) (fun o => g (zh0 o))
 
 /-- Every entry mapped by `g`. -/
-def SignT.map (g : V → W) (A : SignT V) : SignT W :=
+def SignT.map {logn : ℕ} (g : V → W) (A : SignT V logn) : SignT W logn :=
   ⟨fun o => g (A.ch o), fun o => g (A.fh o), fun o => g (A.Fh o), fun o => g (A.t0 o),
     fun o => g (A.t1 o), A.run.map g⟩
 
@@ -315,9 +326,10 @@ theorem RunT.Rel.imp {R R' : V → W → Prop} (P : V → Bool)
     obtain ⟨g1, g2, g3, g4, g5, g6⟩ := h.1 o
     exact ⟨hP _ _ e1 g1, hP _ _ e2 g2, hP _ _ e3 g3, hP _ _ e4 g4, hP _ _ e5 g5, hP _ _ e6 g6⟩
 
-theorem SignT.Rel.imp {R R' : V → W → Prop} (P : V → Bool)
-    (hP : ∀ a x, P a = true → R a x → R' a x) (A : SignT V) (B : SignT W) (hA : A.allB P = true)
-    (h : A.Rel R B) : A.Rel R' B := by
+/-- `SignT.Rel.imp` at every size. -/
+theorem SignT.Rel.impP {logn : ℕ} {R R' : V → W → Prop} (P : V → Bool)
+    (hP : ∀ a x, P a = true → R a x → R' a x) (A : SignT V logn) (B : SignT W logn)
+    (hA : A.allB P = true) (h : A.Rel R B) : A.Rel R' B := by
   simp only [SignT.allB, Bool.and_eq_true] at hA
   refine ⟨fun o => ?_, RunT.Rel.imp P hP _ _ hA.2 h.2⟩
   have e := (allOut_iff _ _).1 hA.1 o
@@ -325,6 +337,11 @@ theorem SignT.Rel.imp {R R' : V → W → Prop} (P : V → Bool)
   obtain ⟨⟨⟨⟨e1, e2⟩, e3⟩, e4⟩, e5⟩ := e
   obtain ⟨g1, g2, g3, g4, g5⟩ := h.1 o
   exact ⟨hP _ _ e1 g1, hP _ _ e2 g2, hP _ _ e3 g3, hP _ _ e4 g4, hP _ _ e5 g5⟩
+
+theorem SignT.Rel.imp {R R' : V → W → Prop} (P : V → Bool)
+    (hP : ∀ a x, P a = true → R a x → R' a x) (A : SignT V) (B : SignT W) (hA : A.allB P = true)
+    (h : A.Rel R B) : A.Rel R' B :=
+  SignT.Rel.impP P hP A B hA h
 
 theorem RunT.Rel.mono {R R' : V → W → Prop} (hR : ∀ a x, R a x → R' a x) :
     ∀ {L : ℕ} (A : RunT V L) (B : RunT W L), A.Rel R B → A.Rel R' B
@@ -334,11 +351,16 @@ theorem RunT.Rel.mono {R R' : V → W → Prop} (hR : ∀ a x, R a x → R' a x)
     obtain ⟨a1, a2, a3, a4, a5, a6⟩ := h.1 o
     exact ⟨hR _ _ a1, hR _ _ a2, hR _ _ a3, hR _ _ a4, hR _ _ a5, hR _ _ a6⟩
 
-theorem SignT.Rel.mono {R R' : V → W → Prop} (hR : ∀ a x, R a x → R' a x) (A : SignT V)
-    (B : SignT W) (h : A.Rel R B) : A.Rel R' B := by
+/-- `SignT.Rel.mono` at every size. -/
+theorem SignT.Rel.monoP {logn : ℕ} {R R' : V → W → Prop} (hR : ∀ a x, R a x → R' a x)
+    (A : SignT V logn) (B : SignT W logn) (h : A.Rel R B) : A.Rel R' B := by
   refine ⟨fun o => ?_, RunT.Rel.mono hR _ _ h.2⟩
   obtain ⟨a1, a2, a3, a4, a5⟩ := h.1 o
   exact ⟨hR _ _ a1, hR _ _ a2, hR _ _ a3, hR _ _ a4, hR _ _ a5⟩
+
+theorem SignT.Rel.mono {R R' : V → W → Prop} (hR : ∀ a x, R a x → R' a x) (A : SignT V)
+    (B : SignT W) (h : A.Rel R B) : A.Rel R' B :=
+  SignT.Rel.monoP hR A B h
 
 theorem RunT.Rel.comp {R1 : V → W → Prop} {R2 : W → X → Prop} :
     ∀ {L : ℕ} (A : RunT V L) (B : RunT W L) (D : RunT X L), A.Rel R1 B → B.Rel R2 D →
@@ -352,13 +374,19 @@ theorem RunT.Rel.comp {R1 : V → W → Prop} {R2 : W → X → Prop} :
     obtain ⟨b1, b2, b3, b4, b5, b6⟩ := h2.1 o
     exact ⟨⟨_, a1, b1⟩, ⟨_, a2, b2⟩, ⟨_, a3, b3⟩, ⟨_, a4, b4⟩, ⟨_, a5, b5⟩, ⟨_, a6, b6⟩⟩
 
-theorem SignT.Rel.comp {R1 : V → W → Prop} {R2 : W → X → Prop} (A : SignT V) (B : SignT W)
-    (D : SignT X) (h1 : A.Rel R1 B) (h2 : B.Rel R2 D) :
+/-- `SignT.Rel.comp` at every size. -/
+theorem SignT.Rel.compP {logn : ℕ} {R1 : V → W → Prop} {R2 : W → X → Prop} (A : SignT V logn)
+    (B : SignT W logn) (D : SignT X logn) (h1 : A.Rel R1 B) (h2 : B.Rel R2 D) :
     A.Rel (fun a d => ∃ b, R1 a b ∧ R2 b d) D := by
   refine ⟨fun o => ?_, RunT.Rel.comp _ _ _ h1.2 h2.2⟩
   obtain ⟨a1, a2, a3, a4, a5⟩ := h1.1 o
   obtain ⟨b1, b2, b3, b4, b5⟩ := h2.1 o
   exact ⟨⟨_, a1, b1⟩, ⟨_, a2, b2⟩, ⟨_, a3, b3⟩, ⟨_, a4, b4⟩, ⟨_, a5, b5⟩⟩
+
+theorem SignT.Rel.comp {R1 : V → W → Prop} {R2 : W → X → Prop} (A : SignT V) (B : SignT W)
+    (D : SignT X) (h1 : A.Rel R1 B) (h2 : B.Rel R2 D) :
+    A.Rel (fun a d => ∃ b, R1 a b ∧ R2 b d) D :=
+  SignT.Rel.compP A B D h1 h2
 
 theorem RunT.Rel.map_left {R : W → X → Prop} {R' : V → X → Prop} (g : V → W)
     (hg : ∀ a x, R' a x → R (g a) x) :
@@ -370,12 +398,18 @@ theorem RunT.Rel.map_left {R : W → X → Prop} {R' : V → X → Prop} (g : V 
     obtain ⟨a1, a2, a3, a4, a5, a6⟩ := h.1 o
     exact ⟨hg _ _ a1, hg _ _ a2, hg _ _ a3, hg _ _ a4, hg _ _ a5, hg _ _ a6⟩
 
-theorem SignT.Rel.map_left {R : W → X → Prop} {R' : V → X → Prop} (g : V → W)
-    (hg : ∀ a x, R' a x → R (g a) x) (A : SignT V) (B : SignT X) (h : A.Rel R' B) :
+/-- `SignT.Rel.map_left` at every size. -/
+theorem SignT.Rel.map_leftP {logn : ℕ} {R : W → X → Prop} {R' : V → X → Prop} (g : V → W)
+    (hg : ∀ a x, R' a x → R (g a) x) (A : SignT V logn) (B : SignT X logn) (h : A.Rel R' B) :
     (A.map g).Rel R B := by
   refine ⟨fun o => ?_, RunT.Rel.map_left g hg _ _ h.2⟩
   obtain ⟨a1, a2, a3, a4, a5⟩ := h.1 o
   exact ⟨hg _ _ a1, hg _ _ a2, hg _ _ a3, hg _ _ a4, hg _ _ a5⟩
+
+theorem SignT.Rel.map_left {R : W → X → Prop} {R' : V → X → Prop} (g : V → W)
+    (hg : ∀ a x, R' a x → R (g a) x) (A : SignT V) (B : SignT X) (h : A.Rel R' B) :
+    (A.map g).Rel R B :=
+  SignT.Rel.map_leftP g hg A B h
 
 /-! ## Simulation -/
 
@@ -392,31 +426,62 @@ structure VSim (O : VOps V) (P : VOps W) (R : V → W → Prop) : Prop where
   tw : ∀ L o, L < 9 → R (O.tw L o) (P.tw L o)
   tws : ∀ L o, L < 9 → R (O.tws L o) (P.tws L o)
 
+/-- Every operation of `O` and `P` preserves `R`, tables at levels `< N`. -/
+structure VSimN (N : ℕ) (O : VOps V) (P : VOps W) (R : V → W → Prop) : Prop where
+  add : ∀ {a b x y}, R a x → R b y → R (O.add a b) (P.add x y)
+  sub : ∀ {a b x y}, R a x → R b y → R (O.sub a b) (P.sub x y)
+  neg : ∀ {a x}, R a x → R (O.neg a) (P.neg x)
+  half : ∀ {a x}, R a x → R (O.half a) (P.half x)
+  mul : ∀ {a b x y}, R a x → R b y → R (O.mul a b) (P.mul x y)
+  divq : ∀ {a x}, R a x → R (O.divq a) (P.divq x)
+  cst : ∀ n, R (O.cst n) (P.cst n)
+  ofInt : ∀ n, R (O.ofInt n) (P.ofInt n)
+  tw : ∀ L o, L < N → R (O.tw L o) (P.tw L o)
+  tws : ∀ L o, L < N → R (O.tws L o) (P.tws L o)
+
+/-- `VSim` is `VSimN 9`. -/
+theorem VSim.toN {O : VOps V} {P : VOps W} {R : V → W → Prop} (h : VSim O P R) :
+    VSimN 9 O P R :=
+  ⟨h.add, h.sub, h.neg, h.half, h.mul, h.divq, h.cst, h.ofInt, h.tw, h.tws⟩
+
+theorem VSimN.toVSim {O : VOps V} {P : VOps W} {R : V → W → Prop} (h : VSimN 9 O P R) :
+    VSim O P R :=
+  ⟨h.add, h.sub, h.neg, h.half, h.mul, h.divq, h.cst, h.ofInt, h.tw, h.tws⟩
+
 section Sim
 
-variable [Inhabited V] [Inhabited W] {O : VOps V} {P : VOps W} {R : V → W → Prop}
+variable [Inhabited V] [Inhabited W] {O : VOps V} {P : VOps W} {R : V → W → Prop} {N : ℕ}
 
-theorem fft_sim (h : VSim O P R) :
-    ∀ (L : ℕ), L ≤ 9 → ∀ (a : Fin (2 ^ L) → ℤ) (o : Out L), R (O.fft L a o) (P.fft L a o)
+theorem fft_simN (h : VSimN N O P R) :
+    ∀ (L : ℕ), L ≤ N → ∀ (a : Fin (2 ^ L) → ℤ) (o : Out L), R (O.fft L a o) (P.fft L a o)
   | 0, _, a, _ => h.cst _
   | L + 1, hL, a, x => by
     obtain ⟨o, b⟩ := (x : Out L × Bool)
-    have hu := fft_sim h L (by omega) (evensZ a) o
-    have hp := h.mul (h.tw L o (by omega)) (fft_sim h L (by omega) (oddsZ a) o)
+    have hu := fft_simN h L (by omega) (evensZ a) o
+    have hp := h.mul (h.tw L o (by omega)) (fft_simN h L (by omega) (oddsZ a) o)
     simp only [VOps.fft]
     erw [memo_eq, memo_eq]
     cases b
     · exact h.add hu hp
     · exact h.sub hu hp
 
-theorem split_sim (h : VSim O P R) {L : ℕ} (hL : L < 9) (t : Out (L + 1) → V)
+theorem fft_sim (h : VSim O P R) :
+    ∀ (L : ℕ), L ≤ 9 → ∀ (a : Fin (2 ^ L) → ℤ) (o : Out L), R (O.fft L a o) (P.fft L a o) :=
+  fft_simN h.toN
+
+theorem split_simN (h : VSimN N O P R) {L : ℕ} (hL : L < N) (t : Out (L + 1) → V)
     (t' : Out (L + 1) → W) (ht : ∀ x, R (t x) (t' x)) (o : Out L) :
     R ((O.split L t).1 o) ((P.split L t').1 o) ∧ R ((O.split L t).2 o) ((P.split L t').2 o) := by
   simp only [VOps.split, memo_eq]
   exact ⟨h.half (h.add (ht _) (ht _)), h.mul (h.tws L o hL) (h.sub (ht _) (ht _))⟩
 
-theorem merge_sim (h : VSim O P R) {L : ℕ} (hL : L < 9) (c0 c1 : Out L → V) (c0' c1' : Out L → W)
-    (hc : ∀ o, R (c0 o) (c0' o) ∧ R (c1 o) (c1' o)) (x : Out (L + 1)) :
+theorem split_sim (h : VSim O P R) {L : ℕ} (hL : L < 9) (t : Out (L + 1) → V)
+    (t' : Out (L + 1) → W) (ht : ∀ x, R (t x) (t' x)) (o : Out L) :
+    R ((O.split L t).1 o) ((P.split L t').1 o) ∧ R ((O.split L t).2 o) ((P.split L t').2 o) :=
+  split_simN h.toN hL t t' ht o
+
+theorem merge_simN (h : VSimN N O P R) {L : ℕ} (hL : L < N) (c0 c1 : Out L → V)
+    (c0' c1' : Out L → W) (hc : ∀ o, R (c0 o) (c0' o) ∧ R (c1 o) (c1' o)) (x : Out (L + 1)) :
     R (O.merge L c0 c1 x) (P.merge L c0' c1' x) := by
   obtain ⟨o, b⟩ := (x : Out L × Bool)
   have hp := h.mul (h.tw L o hL) (hc o).2
@@ -426,22 +491,39 @@ theorem merge_sim (h : VSim O P R) {L : ℕ} (hL : L < 9) (c0 c1 : Out L → V) 
   · exact h.add (hc o).1 hp
   · exact h.sub (hc o).1 hp
 
-theorem upd_sim (h : VSim O P R) {L : ℕ} (t0 t1 z ℓ : Out L → V) (t0' t1' z' ℓ' : Out L → W)
+theorem merge_sim (h : VSim O P R) {L : ℕ} (hL : L < 9) (c0 c1 : Out L → V) (c0' c1' : Out L → W)
+    (hc : ∀ o, R (c0 o) (c0' o) ∧ R (c1 o) (c1' o)) (x : Out (L + 1)) :
+    R (O.merge L c0 c1 x) (P.merge L c0' c1' x) :=
+  merge_simN h.toN hL c0 c1 c0' c1' hc x
+
+theorem upd_simN (h : VSimN N O P R) {L : ℕ} (t0 t1 z ℓ : Out L → V) (t0' t1' z' ℓ' : Out L → W)
     (h0 : ∀ o, R (t0 o) (t0' o)) (h1 : ∀ o, R (t1 o) (t1' o)) (hz : ∀ o, R (z o) (z' o))
     (hl : ∀ o, R (ℓ o) (ℓ' o)) (o : Out L) : R (O.upd t0 t1 z ℓ o) (P.upd t0' t1' z' ℓ' o) := by
   simp only [VOps.upd, memo_eq]
   exact h.add (h0 o) (h.mul (h.sub (h1 o) (hz o)) (hl o))
 
-theorem target_sim (h : VSim O P R) (τ : Target) (ch fh Fh : Out 9 → V) (ch' fh' Fh' : Out 9 → W)
-    (hc : ∀ o, R (ch o) (ch' o)) (hf : ∀ o, R (fh o) (fh' o)) (hF : ∀ o, R (Fh o) (Fh' o))
-    (o : Out 9) : R ((O.target τ ch fh Fh).1 o) ((P.target τ ch' fh' Fh').1 o) ∧
+theorem upd_sim (h : VSim O P R) {L : ℕ} (t0 t1 z ℓ : Out L → V) (t0' t1' z' ℓ' : Out L → W)
+    (h0 : ∀ o, R (t0 o) (t0' o)) (h1 : ∀ o, R (t1 o) (t1' o)) (hz : ∀ o, R (z o) (z' o))
+    (hl : ∀ o, R (ℓ o) (ℓ' o)) (o : Out L) : R (O.upd t0 t1 z ℓ o) (P.upd t0' t1' z' ℓ' o) :=
+  upd_simN h.toN t0 t1 z ℓ t0' t1' z' ℓ' h0 h1 hz hl o
+
+theorem target_simN (h : VSimN N O P R) (τ : Target) {logn : ℕ} (ch fh Fh : Out logn → V)
+    (ch' fh' Fh' : Out logn → W) (hc : ∀ o, R (ch o) (ch' o)) (hf : ∀ o, R (fh o) (fh' o))
+    (hF : ∀ o, R (Fh o) (Fh' o)) (o : Out logn) :
+    R ((O.target τ ch fh Fh).1 o) ((P.target τ ch' fh' Fh').1 o) ∧
       R ((O.target τ ch fh Fh).2 o) ((P.target τ ch' fh' Fh').2 o) := by
   cases τ <;> simp only [VOps.target, memo_eq]
   · exact ⟨h.mul (h.neg (h.divq (hc o))) (hF o), h.mul (h.divq (hc o)) (hf o)⟩
   · exact ⟨h.divq (h.neg (h.mul (hc o) (hF o))), h.divq (h.mul (hc o) (hf o))⟩
 
+theorem target_sim (h : VSim O P R) (τ : Target) (ch fh Fh : Out 9 → V) (ch' fh' Fh' : Out 9 → W)
+    (hc : ∀ o, R (ch o) (ch' o)) (hf : ∀ o, R (fh o) (fh' o)) (hF : ∀ o, R (Fh o) (Fh' o))
+    (o : Out 9) : R ((O.target τ ch fh Fh).1 o) ((P.target τ ch' fh' Fh').1 o) ∧
+      R ((O.target τ ch fh Fh).2 o) ((P.target τ ch' fh' Fh').2 o) :=
+  target_simN h.toN τ ch fh Fh ch' fh' Fh' hc hf hF o
+
 omit [Inhabited V] [Inhabited W] in
-theorem outs_sim (h : VSim O P R) : ∀ {L : ℕ} (r : RunT V L) (r' : RunT W L), r.Rel R r' →
+theorem outs_simN (h : VSimN N O P R) : ∀ {L : ℕ} (r : RunT V L) (r' : RunT W L), r.Rel R r' →
     ∀ o, R ((r.outs O).1 o) ((r'.outs P).1 o) ∧ R ((r.outs O).2 o) ((r'.outs P).2 o)
   | _, .leaf _ _ _ _ _, .leaf _ _ _ _ _, hr, _ => by
     obtain ⟨-, -, -, rfl, rfl⟩ := hr
@@ -449,33 +531,51 @@ theorem outs_sim (h : VSim O P R) : ∀ {L : ℕ} (r : RunT V L) (r' : RunT W L)
   | _, .node _ _ _ _ _ _ _ _, .node _ _ _ _ _ _ _ _, hr, o =>
     ⟨(hr.1 o).2.2.2.2.2, (hr.1 o).2.2.2.1⟩
 
-/-- **Simulation of the conditioned run.** -/
-theorem run_sim (h : VSim O P R) : ∀ {L : ℕ} (T : GTree V L) (T' : GTree W L), L ≤ 9 →
+omit [Inhabited V] [Inhabited W] in
+theorem outs_sim (h : VSim O P R) : ∀ {L : ℕ} (r : RunT V L) (r' : RunT W L), r.Rel R r' →
+    ∀ o, R ((r.outs O).1 o) ((r'.outs P).1 o) ∧ R ((r.outs O).2 o) ((r'.outs P).2 o) :=
+  outs_simN h.toN
+
+/-- **Simulation of the conditioned run**, tables at levels `< N`. -/
+theorem run_simN (h : VSimN N O P R) : ∀ {L : ℕ} (T : GTree V L) (T' : GTree W L), L ≤ N →
     T.Rel R T' → ∀ (t0 t1 : Out L → V) (t0' t1' : Out L → W),
       (∀ o, R (t0 o) (t0' o) ∧ R (t1 o) (t1' o)) → ∀ z0 z1,
         (O.run T t0 t1 z0 z1).Rel R (P.run T' t0' t1' z0 z1)
   | _, .leaf _, .leaf _, _, hT, _, _, _, _, ht, _, _ => ⟨hT, (ht ()).1, (ht ()).2, rfl, rfl⟩
   | _, @GTree.node _ L ℓ A0 A1, .node ℓ' B0 B1, hL, hT, t0, t1, t0', t1', ht, z0, z1 => by
-    have hs1 := split_sim h (by omega) t1 t1' fun o => (ht o).2
-    have r1 := run_sim h A1 B1 (by omega) hT.2.2 _ _ _ _ hs1 (evensZ z1) (oddsZ z1)
-    have hz1 := merge_sim h (by omega) _ _ _ _ (outs_sim h _ _ r1)
-    have hu := upd_sim h t0 t1 _ ℓ t0' t1' _ ℓ' (fun o => (ht o).1) (fun o => (ht o).2) hz1 hT.1
-    have hs0 := split_sim h (by omega) _ _ hu
-    have r0 := run_sim h A0 B0 (by omega) hT.2.1 _ _ _ _ hs0 (evensZ z0) (oddsZ z0)
-    have hz0 := merge_sim h (by omega) _ _ _ _ (outs_sim h _ _ r0)
+    have hs1 := split_simN h (by omega) t1 t1' fun o => (ht o).2
+    have r1 := run_simN h A1 B1 (by omega) hT.2.2 _ _ _ _ hs1 (evensZ z1) (oddsZ z1)
+    have hz1 := merge_simN h (by omega) _ _ _ _ (outs_simN h _ _ r1)
+    have hu := upd_simN h t0 t1 _ ℓ t0' t1' _ ℓ' (fun o => (ht o).1) (fun o => (ht o).2) hz1 hT.1
+    have hs0 := split_simN h (by omega) _ _ hu
+    have r0 := run_simN h A0 B0 (by omega) hT.2.1 _ _ _ _ hs0 (evensZ z0) (oddsZ z0)
+    have hz0 := merge_simN h (by omega) _ _ _ _ (outs_simN h _ _ r0)
     exact ⟨fun o => ⟨(ht o).1, (ht o).2, hT.1 o, hz1 o, hu o, hz0 o⟩, r1, r0⟩
 
-/-- **Simulation of the conditioned attempt.** -/
-theorem signT_sim (h : VSim O P R) (τ : Target) (T : GTree V 9) (T' : GTree W 9) (hT : T.Rel R T')
-    (f F c z0 z1 : ZPoly) : (O.sign τ T f F c z0 z1).Rel R (P.sign τ T' f F c z0 z1) := by
-  have hc := fft_sim h 9 le_rfl c
-  have hf := fft_sim h 9 le_rfl f
-  have hF := fft_sim h 9 le_rfl F
-  have ht := target_sim h τ _ _ _ _ _ _ hc hf hF
+/-- **Simulation of the conditioned run.** -/
+theorem run_sim (h : VSim O P R) : ∀ {L : ℕ} (T : GTree V L) (T' : GTree W L), L ≤ 9 →
+    T.Rel R T' → ∀ (t0 t1 : Out L → V) (t0' t1' : Out L → W),
+      (∀ o, R (t0 o) (t0' o) ∧ R (t1 o) (t1' o)) → ∀ z0 z1,
+        (O.run T t0 t1 z0 z1).Rel R (P.run T' t0' t1' z0 z1) :=
+  run_simN h.toN
+
+/-- **Simulation of the conditioned attempt** at size `2^N`, tables at levels `< N`. -/
+theorem signT_simN (h : VSimN N O P R) (τ : Target) (T : GTree V N) (T' : GTree W N)
+    (hT : T.Rel R T') (f F c z0 z1 : ZPoly N) :
+    (O.sign τ T f F c z0 z1).Rel R (P.sign τ T' f F c z0 z1) := by
+  have hc := fft_simN h N le_rfl c
+  have hf := fft_simN h N le_rfl f
+  have hF := fft_simN h N le_rfl F
+  have ht := target_simN h τ _ _ _ _ _ _ hc hf hF
   unfold SignT.Rel VOps.sign
   dsimp only
   exact ⟨fun o => ⟨hc o, hf o, hF o, (ht o).1, (ht o).2⟩,
-    run_sim h T T' le_rfl hT _ _ _ _ ht z0 z1⟩
+    run_simN h T T' le_rfl hT _ _ _ _ ht z0 z1⟩
+
+/-- **Simulation of the conditioned attempt.** -/
+theorem signT_sim (h : VSim O P R) (τ : Target) (T : GTree V 9) (T' : GTree W 9) (hT : T.Rel R T')
+    (f F c z0 z1 : ZPoly) : (O.sign τ T f F c z0 z1).Rel R (P.sign τ T' f F c z0 z1) :=
+  signT_simN h.toN τ T T' hT f F c z0 z1
 
 end Sim
 

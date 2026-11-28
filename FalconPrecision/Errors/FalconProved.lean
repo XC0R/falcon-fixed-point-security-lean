@@ -87,7 +87,8 @@ def CallP.stored (σ t tbar : ℝ) (hσ : 12778 / 10000 ≤ σ ∧ σ ≤ 1825 /
 theorem CallP.hτ (c : CallP) : |1 / c.σbar ^ 2 - 1 / c.σ ^ 2| ≤ 1 / 2 ^ 40 :=
   inv_sq_sub_le42 _ _ (by linarith [c.hσ.1]) c.hσbar c.hΔσ
 
-theorem CallP.hleaf (c : CallP) (a : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ 511) :
+/-- `CallP.hleaf` for `a ≤ 1023` (Theorem 2's `hleaf` at `a = 2λ - 1` for every `λ ≤ 512`). -/
+theorem CallP.hleaf1023 (c : CallP) (a : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ 1023) :
     3 / 10 ≤ 1 / c.σ ^ 2 ∧ 1 / c.σ ^ 2 ≤ (1000 / 1277) ^ 2 ∧
       3 / 10 ≤ 1 / c.σ ^ 2 + a * (1 / c.σbar ^ 2 - 1 / c.σ ^ 2) ∧
       1 / c.σ ^ 2 + a * (1 / c.σbar ^ 2 - 1 / c.σ ^ 2) ≤ (1000 / 1277) ^ 2 := by
@@ -97,6 +98,12 @@ theorem CallP.hleaf (c : CallP) (a : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ 511) :
   have hhi : 1 / c.σ ^ 2 ≤ 6125 / 10000 := by rw [div_le_iff₀ (by positivity)]; nlinarith
   obtain ⟨h3, h4⟩ := abs_le.1 c.hτ
   refine ⟨by linarith, hhi.trans (by norm_num), ?_, ?_⟩ <;> nlinarith
+
+theorem CallP.hleaf (c : CallP) (a : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ 511) :
+    3 / 10 ≤ 1 / c.σ ^ 2 ∧ 1 / c.σ ^ 2 ≤ (1000 / 1277) ^ 2 ∧
+      3 / 10 ≤ 1 / c.σ ^ 2 + a * (1 / c.σbar ^ 2 - 1 / c.σ ^ 2) ∧
+      1 / c.σ ^ 2 + a * (1 / c.σbar ^ 2 - 1 / c.σ ^ 2) ≤ (1000 / 1277) ^ 2 :=
+  c.hleaf1023 a ha0 (by linarith)
 
 theorem CallP.hσbar_ge (c : CallP) : 1277 / 1000 ≤ c.σbar := by
   obtain ⟨h1, -⟩ := c.hσ

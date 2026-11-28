@@ -50,7 +50,7 @@ variable (P : XChoices) (n : ℕ) {ιA : Type} {aux : OracleSpec.{0, 0} ιA}
 `K·s2B 30.5 δ ≤ 2⁻⁹` proved. That a key passes `check P n δ45q` is a hypothesis on every signing
 key (`specK`); it is not proved for any key here (`#eval` runs of `checkFast` are not kernel
 proofs). Hypotheses and what is not proved otherwise (word size: unbounded `Int`, `InRange` not
-checked; `FTree.Real`, the true leaf range): those of `falcon512_fixed_vs_true_checked`. -/
+checked; `FTreeP.Real`, the true leaf range): those of `falcon512_fixed_vs_true_checked`. -/
 theorem falcon512_fixed_vs_true45_checked [∀ t, Countable (aux t)] [∀ t, Nonempty (aux t)]
     (ρ : Arith64 (1 / 2 ^ 78)) (K : ℕ) (hK : K ≤ 2 ^ 39) (T : ℝ≥0∞) (hT : 1 ≤ T)
     (implA : QueryImpl aux m) (implE implM implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)

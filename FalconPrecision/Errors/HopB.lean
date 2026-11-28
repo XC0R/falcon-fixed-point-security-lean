@@ -34,6 +34,10 @@ along every history of the clamped run the deviation of a call at depth `L` has 
 `≤ s2B y δ ≤ 1/4`). Theorem 2 (`FalconGame.theorem2`) at `λ = 131` then moves `T·2⁻¹²⁹` in X to
 `T·2⁻¹³¹` in Y.
 
+`hopBP`: hop B at every size and every `3 ≤ λ ≤ 512` (Theorem 2 on SamplerZ calls, `renyiP`, with
+its certificates `h35`, `h36` as hypotheses); the Falcon-512 theorems below are its instances, the
+Falcon-1024 ones are in `Falcon1024HopB`.
+
 `falcon512_hopB`: X against Y. `falcon512_fixed_vs_true`: composed with hop A, F′ against Y;
 instances at the tree errors `δ127` (`K ≤ 2³⁹`) and `δ63` (`K ≤ 2³⁰`). Experiments are `OracleComp`s
 over auxiliary oracles and a signing oracle on keys passing `KeyB.Good δ` (`specS`); the four worlds
@@ -46,10 +50,10 @@ Assumed (hypotheses of the theorems): on every signing key, `Close δ` and the s
 calls (one ffSampling call each, restarts included) along every execution (hop A's cap; here it
 bounds the clamp costs and the `2⁴⁹` SamplerZ calls of Theorem 2 at `λ = 131`); for the composition,
 the hypotheses of `Falcon.falcon512_exact64n'`. The clamp is a proof device (no signer clamps): it
-costs `≤ 2⁻¹⁴¹` in X and in Y (`eps141`). Proved here: the true tree is real (`isReal_trueTree`).
-Not proved: a model of key expansion giving `Close δ` (at `p = 127` or `p = 63`), NTRUSolve (nothing
-ties `g, G` to `f, F`; `fG - gF = q` is not assumed), the true leaves' range (§4.1, from
-`αGPV ≤ 1.17`), and what hop A does not prove. -/
+costs `≤ 2⁻¹⁴¹` in X and in Y (`eps141`). Proved in `HopBCore`: the true tree is real
+(`isReal_trueTree`). Not proved: a model of key expansion giving `Close δ` (at `p = 127` or
+`p = 63`), NTRUSolve (nothing ties `g, G` to `f, F`; `fG - gF = q` is not assumed), the true leaves'
+range (§4.1, from `αGPV ≤ 1.17`), and what hop A does not prove. -/
 
 @[expose] public section
 
@@ -69,59 +73,71 @@ theorem l2_pairF_zero {L : ℕ} : l2 (pairF (0 : Out L → ℂ) 0) = 0 := by
   rw [h0] at h
   exact pow_eq_zero_iff (n := 2) two_ne_zero |>.1 (by linarith)
 
-/-- **Centre differences of a clamped signing call** (`ffsB_clamp` at the root, `X = 0`). -/
-theorem signB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
-    Hist (PQ (s2B y δ)) (fun _ => True) (simulateQ (clampQ y) (signB (aux := aux) δ k c)) ∧
-      PathSum wS (simulateQ (clampQ y) (signB (aux := aux) δ k c)) (s2B y δ) := by
-  unfold signB
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
+
+/-- **Centre differences of a clamped signing call** at every size (`ffsB_clampP` at the root,
+`X = 0`). -/
+theorem signB_clampP (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ) (hy : 1 / 2 ≤ y)
+    (k : GoodKeyP logn γf γF σlo hlo Λ σ δ) (c : Fin (2 ^ logn) → ℤ) :
+    Hist (PQ (s2BP Λ logn y δ)) (fun _ => True)
+        (simulateQ (clampQ y) (signBP (aux := aux) δ k c)) ∧
+      PathSum wS (simulateQ (clampQ y) (signBP (aux := aux) δ k c)) (s2BP Λ logn y δ) := by
+  unfold signBP
   split_ifs
   · rw [simulateQ_map, map_eq_bind_pure_comp]
     obtain ⟨H, P⟩ :=
-        ffsB_clamp (aux := aux) y hy k.1.tree k.1.trueTree k.2.close (isReal_trueTree k.1)
-      (t0E k.1.toKey c) (t1E k.1.toKey c) (t0E k.1.toKey c) (t1E k.1.toKey c) (isReal_t0E _ _)
-      (isReal_t1E _ _) 0 (by rw [sub_self, sub_self, l2_pairF_zero])
-    rw [mul_zero, zero_add, ← s2B_eq] at H P
+        ffsB_clampP (aux := aux) hΛ y hy k.1.tree (KeyBP.trueTree σ k.1) k.2.close
+      (isReal_trueTreeP σ k.1) (t0E k.1.toKey c) (t1E k.1.toKey c) (t0E k.1.toKey c)
+      (t1E k.1.toKey c) (isReal_t0EP _ _) (isReal_t1EP _ _) 0
+      (by rw [sub_self, sub_self, l2_pairF_zero])
+    rw [mul_zero, zero_add, ← s2BP_eq] at H P
     exact ⟨H.bind fun _ _ => .pure _ trivial,
         (P.bind fun _ => .pure _ le_rfl).weaken (le_of_eq (add_zero _))⟩
   · rw [simulateQ_pure]
-    exact ⟨.pure _ trivial, .pure _ (s2B_nonneg y δ)⟩
+    exact ⟨.pure _ trivial, .pure _ (s2BP_nonneg Λ logn y δ)⟩
 
-theorem simulateQ_clampQ_signImpl (y : ℝ) {α : Type} (oe : OracleComp (specS aux δ) α) :
-    simulateQ (clampQ y) (runB δ oe) =
-      simulateQ (fun t => simulateQ (clampQ y) (signImpl (signB δ) t)) oe :=
+theorem simulateQ_clampQ_signImplP (y : ℝ) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    simulateQ (clampQ y) (runBP δ oe) =
+      simulateQ (fun t => simulateQ (clampQ y) (signImplP (signBP δ) t)) oe :=
   QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe
 
-theorem clampQ_inl (y : ℝ) (x : ιA) :
-    simulateQ (clampQ (aux := aux) y) (signImpl (signB δ) (.inl x)) =
+theorem clampQ_inlP (y : ℝ)
+    (sg : GoodKeyP logn γf γF σlo hlo Λ σ δ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn)) (x : ιA) :
+    simulateQ (clampQ (aux := aux) y) (signImplP sg (.inl x)) =
       liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl x)) :=
   simulateQ_spec_query (impl := clampQ y) (Sum.inl x)
 
-/-- Along the clamped run every SamplerZ query has `(t̄ - t)² ≤ s2B y δ` and `σ̄ ≤ 1.825`. -/
-theorem hist_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {α : Type} (oe : OracleComp (specS aux δ) α) :
-    Hist (PQ (s2B y δ)) (fun _ => True) (simulateQ (clampQ y) (runB δ oe)) := by
-  rw [simulateQ_clampQ_signImpl]
+/-- Along the clamped run every SamplerZ query has `(t̄ - t)² ≤ s2BP Λ logn y δ` and `σ̄ ≤ 1.825`,
+at every size. -/
+theorem hist_clampP (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ) (hy : 1 / 2 ≤ y) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    Hist (PQ (s2BP Λ logn y δ)) (fun _ => True) (simulateQ (clampQ y) (runBP δ oe)) := by
+  rw [simulateQ_clampQ_signImplP]
   refine Hist.simulateQ_impl _ (fun t => ?_) oe
   rcases t with x | kc
-  · rw [clampQ_inl]
-    exact Hist.query (P := PQ (s2B y δ)) (.inl x) trivial
-  · exact (signB_clamp y hy kc.1 kc.2).1
+  · rw [clampQ_inlP]
+    exact Hist.query (P := PQ (s2BP Λ logn y δ)) (.inl x) trivial
+  · exact (signB_clampP hΛ y hy kc.1 kc.2).1
 
-/-- **Centre differences of the clamped run.** Along every history of the clamped run, the squared
-centre differences of a signing query sum to `≤ s2B y δ`. Per node, line 10:
-`e0' = e0 + e1·ℓ̂ + (t1 - ẑ1)(ℓ̂ - ℓ)` (`ℓ̂` from `FTree`, `‖ℓ̂ - ℓ‖∞ ≤ δ L` from `Close`); the true
-deviation `t - ẑ` grows as in `AbortExact.ffsG_clamp` with `‖ℓ‖∞ ≤ lam512 L + δ L` (true tree real:
-leaf centres real, `isReal_trueTree`). -/
-theorem pathS_clamp (y : ℝ) (hy : 1 / 2 ≤ y) (K : ℕ) {α : Type} (oe : OracleComp (specS aux δ) α)
-    (hq : PathSum (wK δ) oe K) :
-    PathSum wS (simulateQ (clampQ y) (runB δ oe)) (K * s2B y δ) := by
-  rw [simulateQ_clampQ_signImpl, mul_comm]
-  refine pathSum_simulateQ_impl _ (s2B_nonneg y δ) (fun t => ?_) hq
+/-- **Centre differences of the clamped run** at every size: along every execution of the clamped
+run, the squared centre differences sum to `≤ K·s2BP Λ logn y δ` (`≤ s2BP Λ logn y δ` per signing
+query, at most `K` signing queries). -/
+theorem pathS_clampP (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ) (hy : 1 / 2 ≤ y) (K : ℕ) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α)
+    (hq : PathSum (wKP logn γf γF σlo hlo Λ σ δ) oe K) :
+    PathSum wS (simulateQ (clampQ y) (runBP δ oe)) (K * s2BP Λ logn y δ) := by
+  rw [simulateQ_clampQ_signImplP, mul_comm]
+  refine pathSum_simulateQ_impl _ (s2BP_nonneg Λ logn y δ) (fun t => ?_) hq
   rcases t with x | kc
-  · rw [clampQ_inl]
-    exact pathSum_query _ (by simp [wS, wK])
-  · exact (signB_clamp y hy kc.1 kc.2).2.weaken (by simp [wK])
+  · rw [clampQ_inlP]
+    exact pathSum_query _ (by simp [wS, wKP])
+  · exact (signB_clampP hΛ y hy kc.1 kc.2).2.weaken (by simp [wKP])
 
-theorem ffsB_pathN {L : ℕ} (T : FTree L) :
+theorem ffsB_pathNP {L : ℕ} (T : FTreeP σlo hlo Λ L) :
     ∀ (U : LTree L) (h : Close δ T U) (t0 t1 s0 s1 : Out L → ℂ),
       PathSum w1 (ffsB (aux := aux) δ T U h t0 t1 s0 s1) (2 ^ (L + 1)) := by
   induction T with
@@ -140,20 +156,64 @@ theorem ffsB_pathN {L : ℕ} (T : FTree L) :
     refine (PathSum.bind (ih1 U1 h.2.2 _ _ _ _) (T := 2 ^ (L + 1) + 0) fun r1 =>
       PathSum.bind (ih0 U0 h.2.1 _ _ _ _) fun _ => .pure _ le_rfl).weaken (le_of_eq (by ring))
 
-/-- At most `1024` SamplerZ calls per signing query (as `sign164_pathN`, `UsesG.path`). -/
-theorem pathN_runB (K : ℕ) {α : Type} (oe : OracleComp (specS aux δ) α) (hq : PathSum (wK δ) oe K) :
-    PathSum w1 (runB δ oe) (K * 1024) := by
+/-- At most `2^(logn+1)` SamplerZ calls per signing query. -/
+theorem pathN_runBP (K : ℕ) {α : Type} (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α)
+    (hq : PathSum (wKP logn γf γF σlo hlo Λ σ δ) oe K) :
+    PathSum w1 (runBP δ oe) (K * 2 ^ (logn + 1)) := by
   rw [mul_comm]
-  refine pathSum_simulateQ_impl _ (by norm_num) (fun t => ?_) hq
+  refine pathSum_simulateQ_impl _ (by positivity) (fun t => ?_) hq
   rcases t with x | kc
-  · exact pathSum_query _ (by simp [w1, wK])
-  · change PathSum w1 (signB δ kc.1 kc.2) _
-    unfold signB
+  · exact pathSum_query _ (by simp [w1, wKP])
+  · change PathSum w1 (signBP δ kc.1 kc.2) _
+    unfold signBP
     split_ifs
     · rw [map_eq_bind_pure_comp]
-      exact (PathSum.bind (ffsB_pathN _ _ _ _ _ _ _) (T := 0) fun _ => .pure _ le_rfl).weaken
-        (by simp [wK]; norm_num)
-    · exact .pure _ (by simp [wK])
+      exact (PathSum.bind (ffsB_pathNP _ _ _ _ _ _ _) (T := 0) fun _ => .pure _ le_rfl).weaken
+        (by simp [wKP])
+    · exact .pure _ (by simp only [wKP, Sum.elim_inr, mul_one]; positivity)
+
+end Generic
+
+/-- **Centre differences of a clamped signing call** (`ffsB_clamp` at the root, `X = 0`). -/
+theorem signB_clamp (y : ℝ) (hy : 1 / 2 ≤ y) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
+    Hist (PQ (s2B y δ)) (fun _ => True) (simulateQ (clampQ y) (signB (aux := aux) δ k c)) ∧
+      PathSum wS (simulateQ (clampQ y) (signB (aux := aux) δ k c)) (s2B y δ) :=
+  signB_clampP lam512_nonneg y hy k c
+
+theorem simulateQ_clampQ_signImpl (y : ℝ) {α : Type} (oe : OracleComp (specS aux δ) α) :
+    simulateQ (clampQ y) (runB δ oe) =
+      simulateQ (fun t => simulateQ (clampQ y) (signImpl (signB δ) t)) oe :=
+  QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe
+
+theorem clampQ_inl (y : ℝ) (x : ιA) :
+    simulateQ (clampQ (aux := aux) y) (signImpl (signB δ) (.inl x)) =
+      liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl x)) :=
+  simulateQ_spec_query (impl := clampQ y) (Sum.inl x)
+
+/-- Along the clamped run every SamplerZ query has `(t̄ - t)² ≤ s2B y δ` and `σ̄ ≤ 1.825`. -/
+theorem hist_clamp (y : ℝ) (hy : 1 / 2 ≤ y) {α : Type} (oe : OracleComp (specS aux δ) α) :
+    Hist (PQ (s2B y δ)) (fun _ => True) (simulateQ (clampQ y) (runB δ oe)) :=
+  hist_clampP lam512_nonneg y hy oe
+
+/-- **Centre differences of the clamped run.** Along every execution of the clamped run, the squared
+centre differences sum to `≤ K·s2B y δ` (`≤ s2B y δ` per signing query, at most `K` signing
+queries). Per node, line 10: `e0' = e0 + e1·ℓ̂ + (t1 - ẑ1)(ℓ̂ - ℓ)` (`ℓ̂` from `FTree`,
+`‖ℓ̂ - ℓ‖∞ ≤ δ L` from `Close`); the true deviation `t - ẑ` grows as in `AbortExact.ffsG_clamp` with
+`‖ℓ‖∞ ≤ lam512 L + δ L` (true tree real: leaf centres real, `isReal_trueTree`). -/
+theorem pathS_clamp (y : ℝ) (hy : 1 / 2 ≤ y) (K : ℕ) {α : Type} (oe : OracleComp (specS aux δ) α)
+    (hq : PathSum (wK δ) oe K) :
+    PathSum wS (simulateQ (clampQ y) (runB δ oe)) (K * s2B y δ) :=
+  pathS_clampP lam512_nonneg y hy K oe hq
+
+theorem ffsB_pathN {L : ℕ} (T : FTree L) :
+    ∀ (U : LTree L) (h : Close δ T U) (t0 t1 s0 s1 : Out L → ℂ),
+      PathSum w1 (ffsB (aux := aux) δ T U h t0 t1 s0 s1) (2 ^ (L + 1)) :=
+  ffsB_pathNP T
+
+/-- At most `1024` SamplerZ calls per signing query (as `sign164_pathN`, `UsesG.path`). -/
+theorem pathN_runB (K : ℕ) {α : Type} (oe : OracleComp (specS aux δ) α) (hq : PathSum (wK δ) oe K) :
+    PathSum w1 (runB δ oe) (K * 1024) :=
+  (pathN_runBP K oe hq).weaken (by norm_num)
 
 /-! ## Relabelling: the stored and true worlds as ffSampling on one tree -/
 
@@ -195,10 +255,14 @@ exact FFTs. -/
 def RelX {L : ℕ} (r : Option (Samp L)) (s : Samp L) : Prop :=
   ∃ s', r = some s' ∧ s'.z0 = s.z0 ∧ s'.z1 = s.z1 ∧ s'.e0 = s.e0 ∧ s'.e1 = s.e1
 
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
+
 /--
 Abort-free ffSampling on the stored tree (`ffsG`, exact inputs `e`, computed `c`) and ffSampling on
 both trees (`ffsB`, true inputs `r`, stored inputs `e`) make the same relabelled queries. -/
-theorem sameQ_ffsG_ffsB (ρ : Arith) (u : ℝ) {L : ℕ} (T : FTree L) :
+theorem sameQ_ffsG_ffsBP (ρ : Arith) (u : ℝ) {L : ℕ} (T : FTreeP σlo hlo Λ L) :
     ∀ (U : LTree L) (h : Close δ T U) (e0 e1 c0 c1 r0 r1 : Out L → ℂ),
       SameQ RelX (simulateQ canonE (ffsG (aux := aux) ρ u (fun _ _ _ => True) T e0 e1 c0 c1))
         (simulateQ canonF (ffsB (aux := aux) δ T U h r0 r1 e0 e1)) := by
@@ -208,8 +272,8 @@ theorem sameQ_ffsG_ffsB (ρ : Arith) (u : ℝ) {L : ℕ} (T : FTree L) :
     cases U with
     | leaf σ =>
     simp only [ffsG, ffsB, simulateQ_inr, simulateQ_pure,
-      canonF_inr_of (callB σ σb (r0 ()).re (e0 ()).re hb h) (leaf_range hb),
-      canonF_inr_of (callB σ σb (r1 ()).re (e1 ()).re hb h) (leaf_range hb)]
+      canonF_inr_of (callBP σ σb (r0 ()).re (e0 ()).re (leaf_rangeP hlo hb) h) (leaf_rangeP hlo hb),
+      canonF_inr_of (callBP σ σb (r1 ()).re (e1 ()).re (leaf_rangeP hlo hb) h) (leaf_rangeP hlo hb)]
     refine .query_bind _ _ _ fun z0 => .query_bind _ _ _ fun z1 => .pure _ _ ?_
     exact ⟨_, rfl, rfl, rfl, rfl, rfl⟩
   | @node L ℓh hℓh T0 T1 ih0 ih1 =>
@@ -228,7 +292,7 @@ theorem sameQ_ffsG_ffsB (ρ : Arith) (u : ℝ) {L : ℕ} (T : FTree L) :
       simp only [joinU, joinE, mergeE, hz0, hz1, he0, he1, hz0', hz1', he0', he1']
 
 /-- ffSampling on both trees and on the true tree make the same relabelled queries. -/
-theorem sameQ_ffsB_ffsT {L : ℕ} (T : FTree L) :
+theorem sameQ_ffsB_ffsTP {L : ℕ} (T : FTreeP σlo hlo Λ L) :
     ∀ (U : LTree L) (h : Close δ T U) (hU : U.InRange) (t0 t1 s0 s1 : Out L → ℂ),
       SameQ Eq (simulateQ canonE (ffsB (aux := aux) δ T U h t0 t1 s0 s1))
         (simulateQ canonE (ffsT (aux := aux) U hU t0 t1)) := by
@@ -248,29 +312,35 @@ theorem sameQ_ffsB_ffsT {L : ℕ} (T : FTree L) :
     subst hr
     exact (ih0 U0 h.2.1 hU.1 _ _ _ _).bind fun r0 s0 hr0 => hr0 ▸ .pure _ _ rfl
 
-theorem canon_signX (ρ : Arith64 εq) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
+theorem canon_signXP (ρ : Arith64 εq) (k : GoodKeyP logn γf γF σlo hlo Λ σ δ)
+    (c : Fin (2 ^ logn) → ℤ) :
     simulateQ canonE (sign164G (aux := aux) ρ (fun _ _ _ => True) k.1.toKey c) =
-      simulateQ canonF (signB (aux := aux) δ k c) := by
-  unfold sign164G signB
+      simulateQ canonF (signBP (aux := aux) δ k c) := by
+  unfold sign164G signBP
   split_ifs
   · rw [simulateQ_map, simulateQ_map]
-    refine (sameQ_ffsG_ffsB ρ.toArith _ k.1.tree k.1.trueTree k.2.close _ _ _ _ _ _).map_eq _ _ ?_
+    refine (sameQ_ffsG_ffsBP ρ.toArith _ k.1.tree (KeyBP.trueTree σ k.1) k.2.close _ _ _ _ _
+      _).map_eq _ _ ?_
     rintro _ s ⟨s', rfl, hz0, hz1, -, -⟩
     simp only [Option.map, hz0, hz1]
   · rfl
 
-theorem canon_signT (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
-    simulateQ canonE (signB (aux := aux) δ k c) = simulateQ canonE (signT (aux := aux) δ k c) := by
-  unfold signB signT
+theorem canon_signTP (k : GoodKeyP logn γf γF σlo hlo Λ σ δ) (c : Fin (2 ^ logn) → ℤ) :
+    simulateQ canonE (signBP (aux := aux) δ k c) =
+      simulateQ canonE (signTP (aux := aux) δ k c) := by
+  unfold signBP signTP
   split_ifs
   · rw [simulateQ_map, simulateQ_map]
-    exact (sameQ_ffsB_ffsT k.1.tree k.1.trueTree k.2.close _ _ _ _ _).map_eq _ _ fun _ _ h => h ▸
+    exact (sameQ_ffsB_ffsTP k.1.tree (KeyBP.trueTree σ k.1) k.2.close _ _ _ _ _).map_eq _ _
+      fun _ _ h => h ▸
         rfl
   · rfl
 
-theorem canon_runX (ρ : Arith64 εq) {α : Type} (oe : OracleComp (specS aux δ) α) :
-    simulateQ canonE (runX ρ oe) = simulateQ canonF (runB δ oe) := by
-  unfold runX runB
+theorem canon_runXP (ρ : Arith64 εq) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    simulateQ canonE (runKP (sign164G ρ fun _ _ _ => True) oe) =
+      simulateQ canonF (runBP δ oe) := by
+  unfold runKP runBP
   rw [QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe,
     QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe]
   congr 1
@@ -278,18 +348,53 @@ theorem canon_runX (ρ : Arith64 εq) {α : Type} (oe : OracleComp (specS aux δ
   rcases t with x | kc
   · exact (simulateQ_spec_query (impl := canonE) (Sum.inl x)).trans
       (simulateQ_spec_query (impl := canonF) (Sum.inl x)).symm
-  · exact canon_signX ρ kc.1 kc.2
+  · exact canon_signXP ρ kc.1 kc.2
 
-theorem canon_runT {α : Type} (oe : OracleComp (specS aux δ) α) :
-    simulateQ canonE (runB δ oe) = simulateQ canonE (runT δ oe) := by
-  unfold runB runT
+theorem canon_runTP {α : Type} (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    simulateQ canonE (runBP δ oe) = simulateQ canonE (runTP δ oe) := by
+  unfold runBP runTP
   rw [QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe,
     QueryImpl.simulateQ_simulateQ_eq_of_apply (fun _ => rfl) oe]
   refine congrArg (fun impl => simulateQ impl oe) (funext fun t => ?_)
   rcases t with x | kc
   · exact (simulateQ_spec_query (impl := canonE) (Sum.inl x)).trans
       (simulateQ_spec_query (impl := canonE) (Sum.inl x)).symm
-  · exact canon_signT kc.1 kc.2
+  · exact canon_signTP kc.1 kc.2
+
+end Generic
+
+/--
+Abort-free ffSampling on the stored tree (`ffsG`, exact inputs `e`, computed `c`) and ffSampling on
+both trees (`ffsB`, true inputs `r`, stored inputs `e`) make the same relabelled queries. -/
+theorem sameQ_ffsG_ffsB (ρ : Arith) (u : ℝ) {L : ℕ} (T : FTree L) :
+    ∀ (U : LTree L) (h : Close δ T U) (e0 e1 c0 c1 r0 r1 : Out L → ℂ),
+      SameQ RelX (simulateQ canonE (ffsG (aux := aux) ρ u (fun _ _ _ => True) T e0 e1 c0 c1))
+        (simulateQ canonF (ffsB (aux := aux) δ T U h r0 r1 e0 e1)) :=
+  sameQ_ffsG_ffsBP ρ u T
+
+/-- ffSampling on both trees and on the true tree make the same relabelled queries. -/
+theorem sameQ_ffsB_ffsT {L : ℕ} (T : FTree L) :
+    ∀ (U : LTree L) (h : Close δ T U) (hU : U.InRange) (t0 t1 s0 s1 : Out L → ℂ),
+      SameQ Eq (simulateQ canonE (ffsB (aux := aux) δ T U h t0 t1 s0 s1))
+        (simulateQ canonE (ffsT (aux := aux) U hU t0 t1)) :=
+  sameQ_ffsB_ffsTP T
+
+theorem canon_signX (ρ : Arith64 εq) (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
+    simulateQ canonE (sign164G (aux := aux) ρ (fun _ _ _ => True) k.1.toKey c) =
+      simulateQ canonF (signB (aux := aux) δ k c) :=
+  canon_signXP ρ k c
+
+theorem canon_signT (k : GoodKey δ) (c : Fin (2 ^ 9) → ℤ) :
+    simulateQ canonE (signB (aux := aux) δ k c) = simulateQ canonE (signT (aux := aux) δ k c) :=
+  canon_signTP k c
+
+theorem canon_runX (ρ : Arith64 εq) {α : Type} (oe : OracleComp (specS aux δ) α) :
+    simulateQ canonE (runX ρ oe) = simulateQ canonF (runB δ oe) :=
+  canon_runXP ρ oe
+
+theorem canon_runT {α : Type} (oe : OracleComp (specS aux δ) α) :
+    simulateQ canonE (runB δ oe) = simulateQ canonE (runT δ oe) :=
+  canon_runTP oe
 
 variable {m : Type → Type*} [Monad m] [LawfulMonad m] [EvalDistSemantics m]
     [LawfulEvalDistSemantics m]
@@ -312,25 +417,32 @@ theorem dist_canonE (implE implG : QueryImpl (FalconGame.spec aux Falcon.CallP) 
       simulateQ_spec_query (impl := implG) (Sum.inr _)]
     exact (hE q).trans (hG q).symm
 
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
+
 /--
-X two ways: `runX` under `implE` and `runB` under `implF` both sample `D_{σ̄, t̄}` with the stored
-tree's exact centres (`ffsG`'s exact component is `ffsB`'s stored component), and agree on auxiliary
-queries. -/
-theorem relabel_X (ρ : Arith64 εq) (implA : QueryImpl aux m)
+X two ways at every size: abort-free signing on the stored tree (`runKP`) under `implE` and `runBP`
+under `implF` both sample `D_{σ̄, t̄}` with the stored tree's exact centres (`ffsG`'s exact
+component is `ffsB`'s stored component), and agree on auxiliary queries. -/
+theorem relabel_XP (ρ : Arith64 εq) (implA : QueryImpl aux m)
     (implE implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
     (hAE : ∀ x, implE (.inl x) = implA x) (hAF : ∀ x, implF (.inl x) = implA x)
     (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
       discreteGaussianMeasure q.σ q.t)
     (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
       discreteGaussianMeasure q.σbar q.tbar)
-    {α : Type} [MeasurableSpace α] (oe : OracleComp (specS aux δ) α) :
-    𝒟[simulateQ implE (runX ρ oe)] = 𝒟[simulateQ implF (runB δ oe)] := by
-  have h1 : 𝒟[simulateQ implE (runX ρ oe)] = 𝒟[simulateQ implF (simulateQ canonE (runX ρ oe))] := by
+    {α : Type} [MeasurableSpace α] (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    𝒟[simulateQ implE (runKP (sign164G ρ fun _ _ _ => True) oe)] =
+      𝒟[simulateQ implF (runBP δ oe)] := by
+  have h1 : 𝒟[simulateQ implE (runKP (sign164G ρ fun _ _ _ => True) oe)] =
+      𝒟[simulateQ implF (simulateQ canonE (runKP (sign164G ρ fun _ _ _ => True) oe))] := by
     rw [QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implF (canonE t))
       (fun _ => rfl)]
     exact distEq_simulateQ _ _ (dist_canonE implE implF (fun x => (hAF x).trans (hAE x).symm) hE
       fun q => hF _) _
-  have h2 : 𝒟[simulateQ implF (simulateQ canonF (runB δ oe))] = 𝒟[simulateQ implF (runB δ oe)] := by
+  have h2 : 𝒟[simulateQ implF (simulateQ canonF (runBP δ oe))] =
+      𝒟[simulateQ implF (runBP δ oe)] := by
     rw [QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implF (canonF t))
       (fun _ => rfl)]
     refine (distEq_simulateQ _ _ (fun t => ?_) _).symm
@@ -344,7 +456,69 @@ theorem relabel_X (ρ : Arith64 εq) (implA : QueryImpl aux m)
         exact (hF q).trans (hF (Falcon.CallP.stored q.σbar q.tbar q.tbar hq)).symm
       · rw [show simulateQ implF (canonF (.inr q)) = implF (.inr q) by
           rw [canonF_inr_not q hq]; exact simulateQ_spec_query (impl := implF) (Sum.inr _)]
-  rw [h1, canon_runX, h2]
+  rw [h1, canon_runXP, h2]
+
+/-- Y two ways at every size: `runBP` and `runTP` under `implE` both sample `D_{σ, t}` with the true
+tree's centres. -/
+theorem relabel_YP (implE : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    {α : Type} [MeasurableSpace α] (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α) :
+    𝒟[simulateQ implE (runBP δ oe)] = 𝒟[simulateQ implE (runTP δ oe)] := by
+  have h := dist_canonE implE implE (fun _ => rfl) hE fun q => hE _
+  rw [distEq_simulateQ implE _ h, distEq_simulateQ implE _ h,
+    ← QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implE (canonE t))
+        (fun _ => rfl),
+    ← QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implE (canonE t))
+        (fun _ => rfl),
+    canon_runTP]
+
+/-- Signing with `sa` and with `sb` form hop A's `SwapP` at every size: every signing query is on a
+key with a real stored tree. Induction on `oe`; every auxiliary answer type is inhabited (a budget
+of `K` calls then bounds the calls along every execution). -/
+theorem swap_runAP [hA : ∀ t, Nonempty (aux t)]
+    (sa sb : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP) (Sig logn)) (K : ℕ) {α : Type}
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α)
+    (hq : PathSum (wKP logn γf γF σlo hlo Λ σ δ) oe K) :
+    SwapP logn γf γF σlo hlo Λ sa sb K (runKP sa oe) (runKP sb oe) := by
+  have hne : ∀ t, Nonempty ((specSP logn γf γF σlo hlo Λ σ aux δ).Range t) := fun t => by
+    rcases t with x | _
+    · exact hA x
+    · exact ⟨none⟩
+  have hw : ∀ t, 0 ≤ wKP (ιA := ιA) logn γf γF σlo hlo Λ σ δ t := fun t => by
+    rcases t with _ | _ <;> simp [wKP]
+  induction oe using OracleComp.inductionOn generalizing K with
+  | pure x => exact SwapP.pure K x
+  | query_bind t k ih =>
+    unfold runKP
+    rw [simulateQ_bind, simulateQ_bind, simulateQ_spec_query, simulateQ_spec_query]
+    rcases t with x | kc
+    · exact SwapP.query K x _ _ fun u => ih u K (by simpa [wKP] using hq.inv_query u)
+    · have h1 : (0 : ℝ) ≤ K - 1 := by simpa [wKP] using (hq.inv_query none).nonneg hw
+      obtain ⟨K', rfl⟩ : ∃ K', K = K' + 1 := ⟨K - 1, by
+        have : (1 : ℝ) ≤ K := by linarith
+        have : 1 ≤ K := by exact_mod_cast this
+        omega⟩
+      exact SwapP.sign K' kc.1.1.toKey kc.1.2.real kc.2 _ _ fun u =>
+        ih u K' (by simpa [wKP] using hq.inv_query u)
+
+end Generic
+
+/--
+X two ways: `runX` under `implE` and `runB` under `implF` both sample `D_{σ̄, t̄}` with the stored
+tree's exact centres (`ffsG`'s exact component is `ffsB`'s stored component), and agree on auxiliary
+queries. -/
+theorem relabel_X (ρ : Arith64 εq) (implA : QueryImpl aux m)
+    (implE implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hAE : ∀ x, implE (.inl x) = implA x) (hAF : ∀ x, implF (.inl x) = implA x)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    {α : Type} [MeasurableSpace α] (oe : OracleComp (specS aux δ) α) :
+    𝒟[simulateQ implE (runX ρ oe)] = 𝒟[simulateQ implF (runB δ oe)] :=
+  relabel_XP ρ implA implE implF hAE hAF hE hF oe
 
 /-- Y two ways: `runB` and `runT` under `implE` both sample `D_{σ, t}` with the true tree's centres.
 -/
@@ -352,40 +526,16 @@ theorem relabel_Y (implE : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
     (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
       discreteGaussianMeasure q.σ q.t)
     {α : Type} [MeasurableSpace α] (oe : OracleComp (specS aux δ) α) :
-    𝒟[simulateQ implE (runB δ oe)] = 𝒟[simulateQ implE (runT δ oe)] := by
-  have h := dist_canonE implE implE (fun _ => rfl) hE fun q => hE _
-  rw [distEq_simulateQ implE _ h, distEq_simulateQ implE _ h,
-    ← QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implE (canonE t))
-        (fun _ => rfl),
-    ← QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := fun t => simulateQ implE (canonE t))
-        (fun _ => rfl),
-    canon_runT]
+    𝒟[simulateQ implE (runB δ oe)] = 𝒟[simulateQ implE (runT δ oe)] :=
+  relabel_YP implE hE oe
 
 /-- `runA` and `runX` form hop A's `Swap`: every signing query is on a key with a real stored tree.
 Induction on `oe` (`AbortExact.Swap`); every auxiliary answer type is inhabited (a budget of `K`
 calls then bounds the calls along every execution). -/
 theorem swap_runA [hA : ∀ t, Nonempty (aux t)] (ρ : Arith64 εq) (K : ℕ) {α : Type}
     (oe : OracleComp (specS aux δ) α) (hq : PathSum (wK δ) oe K) :
-    Swap (sign164 ρ) (sign164G ρ fun _ _ _ => True) K (runA ρ oe) (runX ρ oe) := by
-  have hne : ∀ t, Nonempty ((specS aux δ).Range t) := fun t => by
-    rcases t with x | _
-    · exact hA x
-    · exact ⟨none⟩
-  have hw : ∀ t, 0 ≤ wK (ιA := ιA) δ t := fun t => by rcases t with _ | _ <;> simp [wK]
-  induction oe using OracleComp.inductionOn generalizing K with
-  | pure x => exact Swap.pure K x
-  | query_bind t k ih =>
-    unfold runA runX
-    rw [simulateQ_bind, simulateQ_bind, simulateQ_spec_query, simulateQ_spec_query]
-    rcases t with x | kc
-    · exact Swap.query K x _ _ fun u => ih u K (by simpa [wK] using hq.inv_query u)
-    · have h1 : (0 : ℝ) ≤ K - 1 := by simpa [wK] using (hq.inv_query none).nonneg hw
-      obtain ⟨K', rfl⟩ : ∃ K', K = K' + 1 := ⟨K - 1, by
-        have : (1 : ℝ) ≤ K := by linarith
-        have : 1 ≤ K := by exact_mod_cast this
-        omega⟩
-      exact Swap.sign K' kc.1.1.toKey kc.1.2.real kc.2 _ _ fun u =>
-        ih u K' (by simpa [wK] using hq.inv_query u)
+    Swap (sign164 ρ) (sign164G ρ fun _ _ _ => True) K (runA ρ oe) (runX ρ oe) :=
+  swap_runAP (sign164 ρ) (sign164G ρ fun _ _ _ => True) K oe hq
 
 omit [Monad m] [LawfulMonad m] [LawfulEvalDistSemantics m] in
 /-- `p_F` of the X side: a SamplerZ answer of `D_{σ̄, t̄}` with `σ̄ ≤ 1.825` and `|t̄ - t| ≤ 1/2`,
@@ -433,18 +583,26 @@ theorem clampQ_eq (y : ℝ) (t : ιA ⊕ Falcon.CallP) :
   · exact (id_map _).symm
   · rfl
 
-/-- Clamping around the true centre costs `p(y - 1/2)` per SamplerZ call in X: along the clamped run
-`|t̄ - t| ≤ 1/2` (from the budget), and `P_{D_{σ̄,t̄}}[|z - t| ≥ y] ≤ P[|z - t̄| ≥ y - 1/2]`
-(`GaussTail`, `etvDist_simulateQ_rewrite_hist`). -/
-theorem tv_clamp_F (y : ℝ) (hy : 1 ≤ y) (implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
+
+/-- Clamping around the true centre costs `p(y - 1/2)` per SamplerZ call in X, at every size and
+budget `K·s2BP Λ logn y δ ≤ S₂ ≤ 1/4`: along the clamped run `|t̄ - t| ≤ 1/2` (from the budget),
+and `P_{D_{σ̄,t̄}}[|z - t| ≥ y] ≤ P[|z - t̄| ≥ y - 1/2]` (`GaussTail`,
+`etvDist_simulateQ_rewrite_hist`). -/
+theorem tv_clamp_FP (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ) (hy : 1 ≤ y)
+    (implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
     (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
       discreteGaussianMeasure q.σbar q.tbar)
-    (K : ℕ) (hS : (K : ℝ) * s2B y δ ≤ 1 / 2 ^ 9) {α : Type} [MeasurableSpace α]
-    (oe : OracleComp (specS aux δ) α) (hq : PathSum (wK δ) oe K) :
-    (𝒟[simulateQ implF (runB δ oe)]).etvDist 𝒟[simulateQ implF (simulateQ (clampQ y) (runB δ oe))] ≤
-      ENNReal.ofReal (pclamp (y - 1 / 2) * (K * 1024)) := by
+    (K : ℕ) (S₂ : ℝ) (hS : (K : ℝ) * s2BP Λ logn y δ ≤ S₂) (hS4 : S₂ ≤ 1 / 4) {α : Type}
+    [MeasurableSpace α] (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α)
+    (hq : PathSum (wKP logn γf γF σlo hlo Λ σ δ) oe K) :
+    (𝒟[simulateQ implF (runBP δ oe)]).etvDist
+        𝒟[simulateQ implF (simulateQ (clampQ y) (runBP δ oe))] ≤
+      ENNReal.ofReal (pclamp (y - 1 / 2) * (K * 2 ^ (logn + 1))) := by
   have hw : ∀ t, 0 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) t := fun t => by rcases t with _ | _ <;> simp [w1]
-  have hN := pathN_runB K oe hq
+  have hN := pathN_runBP K oe hq
   have hid : ∀ x, @Measure.etvDist _ ⊤
       (@evalDist m _ ((FalconGame.spec aux Falcon.CallP).Range (.inl x)) ⊤ (implF (.inl x)))
       (@Measure.map _ _ ⊤ ⊤ (fT y (.inl x))
@@ -457,21 +615,96 @@ theorem tv_clamp_F (y : ℝ) (hy : 1 ≤ y) (implF : QueryImpl (FalconGame.spec 
   rcases Nat.eq_zero_or_pos K with rfl | hK
   · refine
       (etvDist_simulateQ_rewrite_hist implF (fT y) (clampQ_eq y) zero_le_one w1 hw (fun _ => True)
-      (fun t _ => ?_) (runB δ oe) _ hN (Hist.true _)).trans (by simp)
+      (fun t _ => ?_) (runBP δ oe) _ hN (Hist.true _)).trans (by simp)
     rcases t with x | q
     · rw [hid]; exact bot_le
     · exact (etvDist_map_le_one (implF (.inr q)) _).trans (by simp [w1])
-  · have hs : s2B y δ ≤ 1 / 4 := by
+  · have hs : s2BP Λ logn y δ ≤ 1 / 4 := by
       have : (1 : ℝ) ≤ K := by exact_mod_cast hK
-      linarith [mul_le_mul_of_nonneg_right this (s2B_nonneg y δ)]
+      linarith [mul_le_mul_of_nonneg_right this (s2BP_nonneg Λ logn y δ)]
     refine etvDist_simulateQ_rewrite_hist implF (fT y) (clampQ_eq y)
-        (pclamp_nonneg _) w1 hw (PQ (s2B y δ))
-      (fun t ht => ?_) (runB δ oe) _ hN (hist_clamp y (by linarith) oe)
+        (pclamp_nonneg _) w1 hw (PQ (s2BP Λ logn y δ))
+      (fun t ht => ?_) (runBP δ oe) _ hN (hist_clampP hΛ y (by linarith) oe)
     rcases t with x | q
     · rw [hid]; exact bot_le
     · refine (etvDist_map_clamp_shift (implF (.inr q)) (hF q) hy (ht.1.trans hs) ht.2).trans
         (le_of_eq ?_)
       simp [w1]
+
+end Generic
+
+/-- Clamping around the true centre costs `p(y - 1/2)` per SamplerZ call in X: along the clamped run
+`|t̄ - t| ≤ 1/2` (from the budget), and `P_{D_{σ̄,t̄}}[|z - t| ≥ y] ≤ P[|z - t̄| ≥ y - 1/2]`
+(`GaussTail`, `etvDist_simulateQ_rewrite_hist`). -/
+theorem tv_clamp_F (y : ℝ) (hy : 1 ≤ y) (implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    (K : ℕ) (hS : (K : ℝ) * s2B y δ ≤ 1 / 2 ^ 9) {α : Type} [MeasurableSpace α]
+    (oe : OracleComp (specS aux δ) α) (hq : PathSum (wK δ) oe K) :
+    (𝒟[simulateQ implF (runB δ oe)]).etvDist 𝒟[simulateQ implF (simulateQ (clampQ y) (runB δ oe))] ≤
+      ENNReal.ofReal (pclamp (y - 1 / 2) * (K * 1024)) := by
+  rw [show (1024 : ℝ) = 2 ^ (9 + 1) by norm_num]
+  exact tv_clamp_FP lam512_nonneg y hy implF hF K _ hS (by norm_num) oe hq
+
+/-- **Theorem 2 on SamplerZ calls** at every `3 ≤ λ ≤ 512` (`FalconGame.theorem2` with
+`Falcon.CallP`: leaves in `[1.2778, 1.825]`, `σ̄ ≥ 1.277`, `|1/σ̄² - 1/σ²| ≤ 2⁻⁴⁰` per call): at
+most `Nc` SamplerZ calls and squared centre differences `≤ S₂` along every execution, with the Rényi
+certificates `h35`, `h36` of `theorem2` at `(λ, N, (2⁻⁴⁰)²·Nc, S₂)` as hypotheses. The bound
+`λ ≤ 512` is that of `Falcon.CallP.hleaf1023` (stated for `a = 2λ - 1 ≤ 1023`), not of Theorem 2.
+-/
+theorem renyiP [∀ t, Countable (aux t)] (lam N : ℕ) (hlam : 3 ≤ lam) (hlam' : lam ≤ 512)
+    (Nc S₂ : ℝ)
+    (h35 : Real.exp ((2 * lam - 1) * (2 * lam) * ((1 / 2 ^ 40) ^ 2 * Nc) *
+        ((1 / 2 + 1 / 2 ^ 19) / (3 / 10) ^ 2) / (2 * (2 * lam - 2))) ≤ (1 + 1 / (4 * N)) ^ N)
+    (h36 : Real.exp ((2 * lam - 3) * S₂ / (2 * (1277 / 1000) ^ 2) +
+      (2 * lam - 3) * (2 * lam - 2) * S₂ * (1 / 2 ^ 30) / (2 * (2 * lam - 4))) ≤
+        (1 + 1 / (4 * N)) ^ N)
+    (T : ℝ≥0∞) (hT : 1 ≤ T) (implA : QueryImpl aux m)
+    (implE implM implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hAE : ∀ x, implE (.inl x) = implA x) (hAM : ∀ x, implM (.inl x) = implA x)
+    (hAF : ∀ x, implF (.inl x) = implA x)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    (hM : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implM (.inr q)) =
+      discreteGaussianMeasure q.σbar q.t)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    {α : Type} [MeasurableSpace α] [Countable α] [MeasurableSingletonClass α]
+    (o : OracleComp (FalconGame.spec aux Falcon.CallP) α) (hN : PathSum w1 o Nc)
+    (hS : PathSum wS o S₂) {s : Set α} (hs : MeasurableSet s)
+    (hwin : T * (2 : ℝ≥0∞) ^ (-((lam : ℝ) - 2)) < 𝒟[simulateQ implF o] s) :
+    T * (2 : ℝ≥0∞) ^ (-(lam : ℝ)) < 𝒟[simulateQ implE o] s := by
+  have h3 : (3 : ℝ) ≤ lam := by exact_mod_cast hlam
+  have h512 : (lam : ℝ) ≤ 512 := by exact_mod_cast hlam'
+  exact FalconGame.theorem2 lam N hlam T hT Falcon.CallP.σ Falcon.CallP.σbar Falcon.CallP.t
+    Falcon.CallP.tbar (3 / 10) (1277 / 1000) ((1 / 2 ^ 40) ^ 2 * Nc) S₂ implA implE implM implF
+    hAE hAM hAF hE hM hF (fun q => by linarith [q.hσ.1]) (by norm_num)
+    (fun q => q.hleaf1023 (2 * lam - 1) (by linarith) (by linarith)) le_rfl (fun q => q.hσbar_ge) o
+    (hN.mono (sq_nonneg _) fun x => by
+      cases x with
+      | inl _ => simp [w1]
+      | inr q => simpa [w1] using sq_le_sq' (abs_le.1 q.hτ).1 (abs_le.1 q.hτ).2) hS h35 h36 hs
+    hwin
+
+/-- The Rényi certificates of `renyiP` at `λ = 131`, `N = 2⁵¹`, `2⁴⁹` SamplerZ calls and
+`S₂ = 2⁻⁹`. -/
+theorem certs131 :
+    Real.exp ((2 * ((131 : ℕ) : ℝ) - 1) * (2 * ((131 : ℕ) : ℝ)) * ((1 / 2 ^ 40) ^ 2 * 2 ^ 49) *
+        ((1 / 2 + 1 / 2 ^ 19) / (3 / 10) ^ 2) / (2 * (2 * ((131 : ℕ) : ℝ) - 2))) ≤
+      (1 + 1 / (4 * ((2 ^ 51 : ℕ) : ℝ))) ^ (2 ^ 51 : ℕ) ∧
+    Real.exp ((2 * ((131 : ℕ) : ℝ) - 3) * (1 / 2 ^ 9) / (2 * (1277 / 1000) ^ 2) +
+      (2 * ((131 : ℕ) : ℝ) - 3) * (2 * ((131 : ℕ) : ℝ) - 2) * (1 / 2 ^ 9) * (1 / 2 ^ 30) /
+        (2 * (2 * ((131 : ℕ) : ℝ) - 4))) ≤
+      (1 + 1 / (4 * ((2 ^ 51 : ℕ) : ℝ))) ^ (2 ^ 51 : ℕ) := by
+  constructor
+  · refine le_trans ?_ (Falcon.five_quarters_le _ (by positivity))
+    push_cast
+    refine (Falcon.exp_le_one_add_two_mul _ (by positivity) (by norm_num)).trans ?_
+    norm_num
+  · refine le_trans ?_ (Falcon.five_quarters_le _ (by positivity))
+    push_cast
+    refine (Falcon.exp_le_inv_one_sub _ (by norm_num)).trans ?_
+    norm_num
 
 /-- Theorem 2 at `λ = 131` (`FalconGame.theorem2`, as `Falcon.falcon512_proved_n64`): at most `2⁴⁹`
 SamplerZ calls (`|1/σ̄² - 1/σ²| ≤ 2⁻⁴⁰` each, `Falcon.CallP.hτ`) and squared centre differences
@@ -491,29 +724,9 @@ theorem renyi131 [∀ t, Countable (aux t)] (T : ℝ≥0∞) (hT : 1 ≤ T) (imp
     (hS : PathSum wS o (1 / 2 ^ 9)) {s : Set α} (hs : MeasurableSet s)
     (hwin : T * (2 : ℝ≥0∞) ^ (-(129 : ℝ)) < 𝒟[simulateQ implF o] s) :
     T * (2 : ℝ≥0∞) ^ (-(131 : ℝ)) < 𝒟[simulateQ implE o] s := by
-  have h :=
-      FalconGame.theorem2 131 (2 ^ 51)
-          (by norm_num) T hT Falcon.CallP.σ Falcon.CallP.σbar Falcon.CallP.t
-    Falcon.CallP.tbar (3 / 10) (1277 / 1000) ((1 / 2 ^ 40) ^ 2 * 2 ^ 49)
-        (1 / 2 ^ 9) implA implE implM implF
-    hAE hAM hAF hE hM hF (fun q => by linarith [q.hσ.1]) (by norm_num)
-    (fun q => by have := q.hleaf (2 * 131 - 1) (by norm_num) (by norm_num); push_cast; exact this)
-    le_rfl (fun q => q.hσbar_ge) o
-    (hN.mono (sq_nonneg _) fun x => by
-      cases x with
-      | inl _ => simp [w1]
-      | inr q => simpa [w1] using sq_le_sq' (abs_le.1 q.hτ).1 (abs_le.1 q.hτ).2) hS
-    (by
-      refine le_trans ?_ (Falcon.five_quarters_le _ (by positivity))
-      push_cast
-      refine (Falcon.exp_le_one_add_two_mul _ (by positivity) (by norm_num)).trans ?_
-      norm_num)
-    (by
-      refine le_trans ?_ (Falcon.five_quarters_le _ (by positivity))
-      push_cast
-      refine (Falcon.exp_le_inv_one_sub _ (by norm_num)).trans ?_
-      norm_num)
-    hs (by convert hwin using 4; norm_num)
+  have h := renyiP 131 (2 ^ 51) (by norm_num) (by norm_num) (2 ^ 49) (1 / 2 ^ 9) certs131.1
+    certs131.2 T hT implA implE implM implF hAE hAM hAF hE hM hF o hN hS hs
+    (by convert hwin using 4; norm_num)
   convert h using 4
 
 /-- `pclamp 30·1024K ≤ 2⁻¹⁴¹` for `K ≤ 2³⁹` (arithmetic, as `AbortExact.eps_le`). -/
@@ -564,7 +777,7 @@ theorem gainA_le : ∀ L, L ≤ 8 → gainA L ≤ (11402 / 10000) ^ L
       rw [Real.sqrt_le_left (by norm_num), hl]; norm_num
     have ht : 1414213 / 1000000 ≤ √2 := by
       rw [Real.le_sqrt (by norm_num) (by norm_num)]; norm_num
-    rw [gainA, pow_succ, div_le_iff₀ (by positivity)]
+    rw [gainA, gainAP, pow_succ, div_le_iff₀ (by positivity)]
     calc gainA L * (lam512 L + √(lam512 L ^ 2 + 4))
         ≤ (11402 / 10000) ^ L * (9923 / 10000 + 223264 / 100000) :=
           mul_le_mul ih (by linarith) (by positivity) (by positivity)
@@ -575,7 +788,7 @@ theorem gainA_le : ∀ L, L ≤ 8 → gainA L ≤ (11402 / 10000) ^ L
 theorem devB_le {δ : ℕ → ℝ} (hδ : ∀ j < 8, 0 ≤ δ j ∧ δ j ≤ 1 / 2 ^ 40) :
     ∀ L, L ≤ 8 → devB (61 / 2) δ L ≤ 431336 / 10000 * (315255 / 100000) ^ L
   | 0, _ => by
-    rw [devB, pow_zero, mul_one]
+    rw [devB, devBP, pow_zero, mul_one]
     have : √2 ≤ 1414214 / 1000000 := by rw [Real.sqrt_le_left (by norm_num)]; norm_num
     linarith
   | L + 1, hL => by
@@ -587,7 +800,7 @@ theorem devB_le {δ : ℕ → ℝ} (hδ : ∀ j < 8, 0 ≤ δ j ∧ δ j ≤ 1 /
       have : (1 + 9923 / 10000 + δ L) ^ 2 ≤ (1 + 9923 / 10000 + 1 / 2 ^ 40) ^ 2 :=
         pow_le_pow_left₀ (by positivity) (by linarith) 2
       linarith
-    rw [devB, pow_succ]
+    rw [devB, devBP, pow_succ]
     calc √(2 * ((1 + lam512 L + δ L) ^ 2 + 1)) * devB (61 / 2) δ L
         ≤ 315255 / 100000 * (431336 / 10000 * (315255 / 100000) ^ L) :=
           mul_le_mul hr ih (devB_nonneg (by norm_num) δ L) (by norm_num)
@@ -638,6 +851,72 @@ theorem pclamp_anti {y y' : ℝ} (h0 : 0 ≤ y) (h : y ≤ y') : pclamp y' ≤ p
 theorem rpow_ne_top (x : ℝ) : (2 : ℝ≥0∞) ^ x ≠ ⊤ :=
   ENNReal.rpow_ne_top_of_nonneg' (by norm_num) (by norm_num)
 
+section Generic
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} {σ : ℝ}
+
+/--
+**Hop B at every size**: exact signing on the stored tree (X, `runBP` under `implF`) against exact
+Falcon on the true tree at the signing `σ` (Y, `runTP` under `implE`), node bounds `Λ ≥ 0`, depth
+`logn`, Theorem 2 at `3 ≤ λ ≤ 512` with its Rényi certificates `h35`, `h36` as hypotheses. For every
+experiment `oe` with at most `K` signing-oracle calls along every execution, on keys passing
+`KeyBP.Good σ δ`, with `K·2^(logn+1) ≤ Nc`, `K·s2BP Λ logn y δ ≤ S₂ ≤ 1/4` and the clamp cost
+`p(y - 1/2)·2^(logn+1)K ≤ ε`: success `> T·2^(-(λ-2)) + ε` in X gives success `> T·2^(-λ) - ε` in
+Y. Proof as `falcon512_hopB`: clamp every SamplerZ answer to within `y` of its true centre
+(`tv_clamp_FP`, `etvDist_implT_le`), Theorem 2 on the clamped run (`renyiP`). -/
+theorem hopBP [∀ t, Countable (aux t)] (hΛ : ∀ L, 0 ≤ Λ L) (y : ℝ) (hy : 1 ≤ y) (K lam N : ℕ)
+    (hlam : 3 ≤ lam) (hlam' : lam ≤ 512) (Nc S₂ : ℝ) (hNc : (K : ℝ) * 2 ^ (logn + 1) ≤ Nc)
+    (hδ : (K : ℝ) * s2BP Λ logn y δ ≤ S₂) (hS4 : S₂ ≤ 1 / 4)
+    (h35 : Real.exp ((2 * lam - 1) * (2 * lam) * ((1 / 2 ^ 40) ^ 2 * Nc) *
+        ((1 / 2 + 1 / 2 ^ 19) / (3 / 10) ^ 2) / (2 * (2 * lam - 2))) ≤ (1 + 1 / (4 * N)) ^ N)
+    (h36 : Real.exp ((2 * lam - 3) * S₂ / (2 * (1277 / 1000) ^ 2) +
+      (2 * lam - 3) * (2 * lam - 2) * S₂ * (1 / 2 ^ 30) / (2 * (2 * lam - 4))) ≤
+        (1 + 1 / (4 * N)) ^ N)
+    (ε : ℝ≥0∞) (hε : ENNReal.ofReal (pclamp (y - 1 / 2) * (K * 2 ^ (logn + 1))) ≤ ε)
+    (T : ℝ≥0∞) (hT : 1 ≤ T) (implA : QueryImpl aux m)
+    (implE implM implF : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (hAE : ∀ x, implE (.inl x) = implA x) (hAM : ∀ x, implM (.inl x) = implA x)
+    (hAF : ∀ x, implF (.inl x) = implA x)
+    (hE : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implE (.inr q)) =
+      discreteGaussianMeasure q.σ q.t)
+    (hM : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implM (.inr q)) =
+      discreteGaussianMeasure q.σbar q.t)
+    (hF : ∀ q, @evalDist m _ ((FalconGame.spec aux _).Range (.inr q)) ⊤ (implF (.inr q)) =
+      discreteGaussianMeasure q.σbar q.tbar)
+    {α : Type} [MeasurableSpace α] [Countable α] [MeasurableSingletonClass α]
+    (oe : OracleComp (specSP logn γf γF σlo hlo Λ σ aux δ) α)
+    (hq : PathSum (wKP logn γf γF σlo hlo Λ σ δ) oe K) {s : Set α} (hs : MeasurableSet s)
+    (hwin : T * (2 : ℝ≥0∞) ^ (-((lam : ℝ) - 2)) + ε < 𝒟[simulateQ implF (runBP δ oe)] s) :
+    T * (2 : ℝ≥0∞) ^ (-(lam : ℝ)) < 𝒟[simulateQ implE (runTP δ oe)] s + ε := by
+  have hε' : ε ≠ ⊤ := (ENNReal.add_ne_top.1 (ne_top_of_lt hwin)).2
+  have hw0 : ∀ t, 0 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) t :=
+      fun t => by rcases t with _ | _ <;> simp [w1]
+  have hw1 : ∀ q, 1 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) (.inr q) := fun q => by simp [w1]
+  have hX : 𝒟[simulateQ implF (runBP δ oe)] s ≤
+      𝒟[simulateQ implF (simulateQ (clampQ y) (runBP δ oe))] s + ε := by
+    refine (le_add_etvDist _ _ hs).trans (add_le_add le_rfl ?_)
+    exact (tv_clamp_FP hΛ y hy implF hF K S₂ hδ hS4 oe hq).trans hε
+  have hwc : T * (2 : ℝ≥0∞) ^ (-((lam : ℝ) - 2)) <
+      𝒟[simulateQ implF (simulateQ (clampQ y) (runBP δ oe))] s :=
+    (ENNReal.add_lt_add_iff_right hε').1 (hwin.trans_le hX)
+  have hN : PathSum w1 (simulateQ (clampQ y) (runBP δ oe)) Nc :=
+    (PathSum.simulateQ_map (fT y) (clampQ_eq _) (pathN_runBP K oe hq)).weaken hNc
+  have hS : PathSum wS (simulateQ (clampQ y) (runBP δ oe)) S₂ :=
+    (pathS_clampP hΛ y (by linarith) K oe hq).weaken hδ
+  have hY := renyiP lam N hlam hlam' Nc S₂ h35 h36 T hT implA implE implM implF hAE hAM hAF hE hM
+    hF _ hN hS hs hwc
+  have hYc : 𝒟[simulateQ implE (simulateQ (clampQ y) (runBP δ oe))] s ≤
+      𝒟[simulateQ implE (runBP δ oe)] s + ε := by
+    refine (le_add_etvDist _ _ hs).trans (add_le_add le_rfl ?_)
+    rw [Measure.etvDist_comm, simulateQ_clampQ]
+    refine (etvDist_implT_le y (by linarith) implE hE w1 hw0 hw1 (pathN_runBP K oe hq)).trans
+      (le_trans (ENNReal.ofReal_le_ofReal ?_) hε)
+    exact mul_le_mul_of_nonneg_right (pclamp_anti (by linarith) (by linarith)) (by positivity)
+  rw [← relabel_YP implE hE oe]
+  exact hY.trans_le hYc
+
+end Generic
+
 /--
 **Hop B at Falcon-512**: exact signing on the stored tree (X) against exact Falcon on the true tree
 (Y). For every experiment `oe` with at most `K ≤ 2³⁹` signing-oracle calls (one ffSampling call
@@ -666,34 +945,15 @@ theorem falcon512_hopB [∀ t, Countable (aux t)] (K : ℕ) (hK : K ≤ 2 ^ 39)
     T * (2 : ℝ≥0∞) ^ (-(131 : ℝ)) < 𝒟[simulateQ implE (runT δ oe)] s + (2 : ℝ≥0∞) ^ (-(141 : ℝ)) :=
         by
   have hK' : (K : ℝ) ≤ 2 ^ 39 := by exact_mod_cast hK
-  have hw0 : ∀ t, 0 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) t :=
-      fun t => by rcases t with _ | _ <;> simp [w1]
-  have hw1 : ∀ q, 1 ≤ (w1 : ιA ⊕ Falcon.CallP → ℝ) (.inr q) := fun q => by simp [w1]
-  have hε : ENNReal.ofReal (pclamp 30 * (K * 1024)) ≤ (2 : ℝ≥0∞) ^ (-(141 : ℝ)) := eps141 K hK
-  have hX : 𝒟[simulateQ implF (runB δ oe)] s ≤
-      𝒟[simulateQ implF (simulateQ (clampQ (61 / 2)) (runB δ oe))] s + (2 : ℝ≥0∞) ^ (-(141 : ℝ)) :=
-          by
-    refine (le_add_etvDist _ _ hs).trans (add_le_add le_rfl ?_)
-    refine (tv_clamp_F (61 / 2) (by norm_num) implF hF K hδ oe hq).trans (le_trans ?_ hε)
-    norm_num
-  have hwc : T * (2 : ℝ≥0∞) ^ (-(129 : ℝ)) <
-      𝒟[simulateQ implF (simulateQ (clampQ (61 / 2)) (runB δ oe))] s :=
-    (ENNReal.add_lt_add_iff_right (rpow_ne_top _)).1 (hwin.trans_le hX)
-  have hN : PathSum w1 (simulateQ (clampQ (61 / 2)) (runB δ oe)) (2 ^ 49) := by
-    refine (PathSum.simulateQ_map (fT (61 / 2)) (clampQ_eq _) (pathN_runB K oe hq)).weaken ?_
-    linarith [hK']
-  have hS : PathSum wS (simulateQ (clampQ (61 / 2)) (runB δ oe)) (1 / 2 ^ 9) :=
-    (pathS_clamp (61 / 2) (by norm_num) K oe hq).weaken hδ
-  have hY := renyi131 T hT implA implE implM implF hAE hAM hAF hE hM hF _ hN hS hs hwc
-  have hYc : 𝒟[simulateQ implE (simulateQ (clampQ (61 / 2)) (runB δ oe))] s ≤
-      𝒟[simulateQ implE (runB δ oe)] s + (2 : ℝ≥0∞) ^ (-(141 : ℝ)) := by
-    refine (le_add_etvDist _ _ hs).trans (add_le_add le_rfl ?_)
-    rw [Measure.etvDist_comm, simulateQ_clampQ]
-    refine (etvDist_implT_le (61 / 2) (by norm_num) implE hE w1 hw0 hw1 (pathN_runB K oe hq)).trans
-      (le_trans (ENNReal.ofReal_le_ofReal ?_) hε)
-    exact mul_le_mul_of_nonneg_right (pclamp_anti (by norm_num) (by norm_num)) (by positivity)
-  rw [← relabel_Y implE hE oe]
-  exact hY.trans_le hYc
+  have e1 : (2 : ℝ≥0∞) ^ (-(((131 : ℕ) : ℝ) - 2)) = 2 ^ (-(129 : ℝ)) := by congr 1; norm_num
+  have e2 : (2 : ℝ≥0∞) ^ (-((131 : ℕ) : ℝ)) = 2 ^ (-(131 : ℝ)) := by norm_num
+  have h := hopBP lam512_nonneg (61 / 2) (by norm_num) K 131 (2 ^ 51) (by norm_num) (by norm_num)
+    (2 ^ 49) (1 / 2 ^ 9) (by norm_num; linarith) hδ (by norm_num) certs131.1 certs131.2
+    (2 ^ (-(141 : ℝ))) (by
+      rw [show (61 / 2 : ℝ) - 1 / 2 = 30 by norm_num, show (2 : ℝ) ^ (9 + 1) = 1024 by norm_num]
+      exact eps141 K hK)
+    T hT implA implE implM implF hAE hAM hAF hE hM hF oe hq hs (by rw [e1]; exact hwin)
+  rwa [e2] at h
 
 /-- **Fixed-point signing against exact Falcon at Falcon-512** (hop A then hop B). For every Type 1
 arithmetic `ρ` with `1/q` within `2⁻⁷⁸` and every experiment `oe` with at most `K ≤ 2³⁹`
@@ -766,7 +1026,7 @@ with `αhybrid ≤ γhybrid = 4`, with relative error `≤ 2⁻⁴⁵`; the piec
 any lemma: the factor bounds `‖ℓ̂ - ℓ‖∞ ≤ δ63 L` (the diagonal relative errors of `LDL.tree_rel` do
 not yield them in Lean; the constants are numerical estimates), the range `[1.2778, 1.825]` of the
 true leaves (§4.1, from `αGPV ≤ 1.17`), and the stored tree's `‖ℓ̂‖∞ ≤ lam512 L` (`FTree`) and
-realness (`FTree.Real`). Other hypotheses, and what is not proved: those of
+realness (`FTreeP.Real`). Other hypotheses, and what is not proved: those of
 `falcon512_fixed_vs_true`. -/
 theorem falcon512_fixed_vs_true63 [∀ t, Countable (aux t)] [∀ t, Nonempty (aux t)]
     (ρ : Arith64 (1 / 2 ^ 78)) (K : ℕ) (hK : K ≤ 2 ^ 30) (T : ℝ≥0∞) (hT : 1 ≤ T)

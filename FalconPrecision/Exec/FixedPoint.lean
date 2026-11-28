@@ -136,7 +136,7 @@ theorem isqrt_err (r : RMode) (n : ℤ) : |(r.isqrt n : ℝ) - √(n.toNat : ℝ
       rw [Real.lt_sqrt (by positivity)]
       have : (n.toNat.sqrt : ℝ) * n.toNat.sqrt + n.toNat.sqrt + 1 ≤ n.toNat := by
         exact_mod_cast hlt
-      linarith [this, show ((n.toNat.sqrt : ℝ) + 1 / 2) ^ 2 =
+      linarith [show ((n.toNat.sqrt : ℝ) + 1 / 2) ^ 2 =
           n.toNat.sqrt * n.toNat.sqrt + n.toNat.sqrt + 1 / 4 by ring]
     push_cast; rw [abs_le]; constructor <;> linarith
   · by_cases hr : r = floor
@@ -147,7 +147,7 @@ theorem isqrt_err (r : RMode) (n : ℤ) : |(r.isqrt n : ℝ) - √(n.toNat : ℝ
       have h3 : √(n.toNat : ℝ) < n.toNat.sqrt + 1 / 2 := by
         rw [Real.sqrt_lt' (by positivity)]
         have : (n.toNat : ℝ) ≤ n.toNat.sqrt * n.toNat.sqrt + n.toNat.sqrt := by exact_mod_cast hle
-        linarith [this, show ((n.toNat.sqrt : ℝ) + 1 / 2) ^ 2 =
+        linarith [show ((n.toNat.sqrt : ℝ) + 1 / 2) ^ 2 =
             n.toNat.sqrt * n.toNat.sqrt + n.toNat.sqrt + 1 / 4 by ring]
       rw [Int.cast_natCast, abs_le]; constructor <;> linarith
 

@@ -31,8 +31,8 @@ namespace FalconPrecision.Exec
 
 open FalconPrecision.Errors.FFTRec FalconPrecision.Errors.FFSamp
 
-/-- An integer polynomial of degree `< 512`. -/
-abbrev ZPoly : Type := Fin (2 ^ 9) → ℤ
+/-- An integer polynomial of degree `< 2^logn` (Falcon-512: `logn = 9`). -/
+abbrev ZPoly (logn : ℕ := 9) : Type := Fin (2 ^ logn) → ℤ
 
 /-- The target order (ePrint 2026/2431 §3.1). -/
 inductive Target where
@@ -135,7 +135,7 @@ def twOkN (rc : RMode) (N : ℕ) : Bool :=
     let s := twsB rc 64 L
     allOut L fun o => (t o).radLeB (7072 / 10000 / 2 ^ 64) && (s o).radLeB (7072 / 10000 / 2 ^ 64)
 
-/-- The tables of Falcon-512 (levels `< 9`). -/
+/-- The tables of Falcon-512 (levels `< 9`); Falcon-1024's are `twOkN rc 10`. -/
 def twOk (rc : RMode) : Bool := twOkN rc 9
 
 variable (C : Choices)
@@ -209,43 +209,46 @@ def ffsX {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) :
     else pure none
 
 /-- The target `(t̂0, t̂1)` from `f`, `F` and the hash `c`, in the order `C.target`. -/
-def targetX (f F c : ZPoly) : (Out 9 → Cx 64) × (Out 9 → Cx 64) :=
+def targetX {logn : ℕ} (f F c : ZPoly logn) : (Out logn → Cx 64) × (Out logn → Cx 64) :=
   let w := wordFn C.word
   let rm := C.x.rm
-  let ch := fftW C 9 c
-  let fh := fftW C 9 f
-  let Fh := fftW C 9 F
+  let ch := fftW C logn c
+  let fh := fftW C logn f
+  let Fh := fftW C logn F
   match C.target with
   | .scaleFirst =>
-    let cq := memo 9 fun o => (divqX rm C.qinv (ch o)).wr w
-    (memo 9 fun o => ((cq o).neg.wr w).mulW w rm (Fh o), memo 9 fun o => (cq o).mulW w rm (fh o))
+    let cq := memo logn fun o => (divqX rm C.qinv (ch o)).wr w
+    (memo logn fun o => ((cq o).neg.wr w).mulW w rm (Fh o),
+      memo logn fun o => (cq o).mulW w rm (fh o))
   | .multiplyFirst =>
-    (memo 9 fun o => (divqX rm C.qinv (((ch o).mulW w rm (Fh o)).neg.wr w)).wr w,
-      memo 9 fun o => (divqX rm C.qinv ((ch o).mulW w rm (fh o))).wr w)
+    (memo logn fun o => (divqX rm C.qinv (((ch o).mulW w rm (Fh o)).neg.wr w)).wr w,
+      memo logn fun o => (divqX rm C.qinv ((ch o).mulW w rm (fh o))).wr w)
 
 /-- **One signing attempt** on the stored tree `T` of `k`: `⊥` unless `|c i| < q`, else the
 integers `z = (z0, z1)` of `ffsX` on `targetX`, or `⊥` when a check fails. -/
-def signX {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 9)
-    (k : RawKey) (c : ZPoly) : m (Option (ZPoly × ZPoly)) :=
+def signX {m : Type → Type*} [Monad m] {logn : ℕ} (samp : Fx 64 → Fx 64 → m ℤ)
+    (T : CTree 64 logn) (k : RawKey logn) (c : ZPoly logn) :
+    m (Option (ZPoly logn × ZPoly logn)) :=
   if ∀ i, |c i| < 12289 then
     (fun r => r.map fun s => (s.z0, s.z1)) <$>
       ffsX C samp T (targetX C k.f k.F c).1 (targetX C k.f k.F c).2
   else pure none
 
 /-- `s = (c, 0) - zB` for `B = [[g, -f], [G, -F]]`, exactly. -/
-def sOf (k : RawKey) (c z0 z1 : ZPoly) : ZPoly × ZPoly :=
+def sOf {logn : ℕ} (k : RawKey logn) (c z0 z1 : ZPoly logn) : ZPoly logn × ZPoly logn :=
   (fun i => c i - ncoef z0 k.g i - ncoef z1 k.G i, fun i => ncoef z0 k.f i + ncoef z1 k.F i)
 
 /-- `‖s‖² ≤ ⌊β²⌋` and, if set, `|sᵢ| ≤ B`. -/
-def normOk (s : ZPoly × ZPoly) : Bool :=
-  decide (((List.finRange (2 ^ 9)).map fun i => s.1 i ^ 2 + s.2 i ^ 2).sum ≤ (C.beta2 : ℤ)) &&
+def normOk {logn : ℕ} (s : ZPoly logn × ZPoly logn) : Bool :=
+  decide (((List.finRange (2 ^ logn)).map fun i => s.1 i ^ 2 + s.2 i ^ 2).sum ≤ (C.beta2 : ℤ)) &&
     (match C.infB with
       | none => true
-      | some B => (List.finRange (2 ^ 9)).all fun i =>
+      | some B => (List.finRange (2 ^ logn)).all fun i =>
         decide (|s.1 i| ≤ (B : ℤ) ∧ |s.2 i| ≤ (B : ℤ)))
 
 /-- The signature of an attempt, if its norm passes. -/
-def accX (k : RawKey) (c : ZPoly) (y : Option (ZPoly × ZPoly)) : Option (ZPoly × ZPoly) :=
+def accX {logn : ℕ} (k : RawKey logn) (c : ZPoly logn) (y : Option (ZPoly logn × ZPoly logn)) :
+    Option (ZPoly logn × ZPoly logn) :=
   y.bind fun z => if normOk C (sOf k c z.1 z.2) then some (sOf k c z.1 z.2) else none
 
 /-- At most `N` attempts `att`, until `acc` accepts. -/
@@ -259,9 +262,10 @@ def loopR {m : Type → Type*} [Monad m] {γ β : Type} (att : m γ) (acc : γ �
 
 /-- **The restart loop** (spec Alg. 10 l. 4-11) with at most `N` attempts: salt and hash once
 (`reused`) or per attempt (`perAttempt`). -/
-def signLoopX {m : Type → Type*} [Monad m] {S M β : Type} (mode : SaltMode) (salt : m S)
-    (hash : S → M → m ZPoly) (att : ZPoly → m (Option (ZPoly × ZPoly)))
-    (acc : ZPoly → Option (ZPoly × ZPoly) → Option β) (msg : M) (N : ℕ) : m (Option (S × β)) :=
+def signLoopX {m : Type → Type*} [Monad m] {S M β : Type} {logn : ℕ} (mode : SaltMode) (salt : m S)
+    (hash : S → M → m (ZPoly logn)) (att : ZPoly logn → m (Option (ZPoly logn × ZPoly logn)))
+    (acc : ZPoly logn → Option (ZPoly logn × ZPoly logn) → Option β) (msg : M) (N : ℕ) :
+    m (Option (S × β)) :=
   match mode with
   | .reused => salt >>= fun s => hash s msg >>= fun c =>
     (Option.map fun b => (s, b)) <$> loopR (att c) (acc c) N
@@ -271,10 +275,11 @@ def signLoopX {m : Type → Type*} [Monad m] {S M β : Type} (mode : SaltMode) (
 
 /-- **The signer**: stored tree `storeC`, attempts `signX`, loop `signLoopX`, the sampler given
 the SamplerZ choices. -/
-def signMsgX {m : Type → Type*} [Monad m] {S M : Type}
-    (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S) (hash : S → M → m ZPoly)
-    (k : RawKey) (msg : M) : m (Option (S × (ZPoly × ZPoly))) :=
-  let T := storeC C.x C.xn k
+def signMsgX {m : Type → Type*} [Monad m] {S M : Type} {L : ℕ}
+    (sampF : SampChoices → Fx 64 → Fx 64 → m ℤ) (salt : m S) (hash : S → M → m (ZPoly (L + 1)))
+    (k : RawKey (L + 1)) (msg : M) (σq : ℚ := σ512q) :
+    m (Option (S × (ZPoly (L + 1) × ZPoly (L + 1)))) :=
+  let T := storeC C.x C.xn k σq
   signLoopX C.salt salt hash (signX C (sampF C.samp) T k) (accX C k) msg C.cap
 
 /-! ## Integer ranges -/
@@ -291,7 +296,7 @@ def clampS {m : Type → Type*} [Monad m] (W : ℕ) (samp : Fx 64 → Fx 64 → 
 def fitsQ (i : ℕ) (b : ℚ) : Bool := decide (b < 2 ^ (i - 1))
 
 /-- `‖a‖₁`. -/
-def l1Q (a : ZPoly) : ℚ := (((List.finRange (2 ^ 9)).map fun j => |a j|).sum : ℤ)
+def l1Q {logn : ℕ} (a : ZPoly logn) : ℚ := (((List.finRange (2 ^ logn)).map fun j => |a j|).sum : ℤ)
 
 /-- An upper bound of `max ‖v o‖`. -/
 def nmax (L : ℕ) (v : Out L → Cx 64) : ℚ :=
@@ -321,14 +326,15 @@ def rangeT (i W : ℕ) (E : ℚ) : {L : ℕ} → CTree 64 L → ℚ → Bool
       fitsQ i (D' * lam + 1) && fitsQ i (2 * A0 + 1) && fitsQ i (2 * (A0 + 1 + D0) + 1) &&
       rangeT i W E T1 (A + 1) && rangeT i W E T0 (A0 + 1)
 
-/-- **The integer-range check** of `signX` on the key `k` at budget `InRange i`, sampler answers
-within `W` of `⌊t̄⌋`, `|Im t̄| ≤ imE i` at the leaves: the tables `twOk C.x.rc`; FFT bounds of `c`
-(`|c i| < q`), `f`, `F`; the target in the order `C.target`; `rangeT` on the stored tree. -/
-def checkRange (i W : ℕ) (k : RawKey) : Bool :=
+/-- **The integer-range check** of `signX` on the key `k` (degree `n = 2^(L+1)`) at budget
+`InRange i`, sampler answers within `W` of `⌊t̄⌋`, `|Im t̄| ≤ imE i` at the leaves: the tables at
+levels `< L + 1` (`twOkN`; `twOk` at `n = 512`); FFT bounds of `c` (`|c i| < q`), `f`, `F`; the
+target in the order `C.target`; `rangeT` on the stored tree (leaves at `σq`). -/
+def checkRange {L : ℕ} (i W : ℕ) (k : RawKey (L + 1)) (σq : ℚ := σ512q) : Bool :=
   let C0 := { C with word := none }
-  let bc : ℚ := 2 * (512 * 12288) + 1
-  let mf := nmax 9 (fftW C0 9 k.f) + 1
-  let mF := nmax 9 (fftW C0 9 k.F) + 1
+  let bc : ℚ := 2 * (2 ^ (L + 1) * 12288) + 1
+  let mf := nmax (L + 1) (fftW C0 (L + 1) k.f) + 1
+  let mF := nmax (L + 1) (fftW C0 (L + 1) k.F) + 1
   let tgt : List ℚ × ℚ := match C.target with
     | .scaleFirst =>
       let cq := 2 * bc / 12289 + 1
@@ -336,7 +342,7 @@ def checkRange (i W : ℕ) (k : RawKey) : Bool :=
     | .multiplyFirst =>
       let p := bc * max mF mf + 1
       ([p, 2 * p / 12289 + 1], 2 * p / 12289 + 1)
-  twOk C.x.rc && ([bc, 2 * l1Q k.f + 1, 2 * l1Q k.F + 1] ++ tgt.1).all (fitsQ i) &&
-    rangeT i W (imE i) (storeC C.x C.xn k) tgt.2
+  twOkN C.x.rc (L + 1) && ([bc, 2 * l1Q k.f + 1, 2 * l1Q k.F + 1] ++ tgt.1).all (fitsQ i) &&
+    rangeT i W (imE i) (storeC C.x C.xn k σq) tgt.2
 
 end FalconPrecision.Exec

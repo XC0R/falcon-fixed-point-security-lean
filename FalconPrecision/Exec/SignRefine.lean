@@ -14,9 +14,14 @@ public import FalconPrecision.Exec.FixedPointArith64
 `RMode.not_isRound_floor`); computed tables within `0.7072·2⁻⁶⁴` (`twOk`, decided); the
 scale-first target (the only order S8 models: for multiply-first `sign164G`'s operation sequence
 is not met); unbounded words (`word = none`; words enter by `signX_word`, `Exec.SignRange`);
-range checks, if any, at `R ≥ 1`. Every other field is free.
+range checks, if any, at `R ≥ 1`. Every other field is free. `AdmN N C`: the same with the tables
+decided at levels `< N` (`twOkN`); `Adm C` gives `AdmN 9 C` (`Adm.toN`).
 
-`arithX C h : Arith64 C.qinv.εq` is the executable arithmetic with the executable tables.
+`arithX C h : Arith64 C.qinv.εq` is the executable arithmetic with the executable tables;
+`arithXN N C h` the same with the executable tables at levels `< N` and exact ones above
+(`twXN`, `twsXN`; `arithX C h = arithXN 9 C h.toN`). `ffsX_toSampN`, `ffsX_refinesN`: the
+refinement of `ffsG (arithXN N C h)` by `ffsX` on trees of depth `≤ N` (Falcon-1024, `N = 10`:
+`Exec.SignRefine1024`).
 `signX_refines`: in every world whose SamplerZ answer depends only on `(σ̄, t̄)` through `samp`,
 S8's `sign164G (arithX C h) (chkOf C.rchk)` on the checked key `toKeyB` is `signX` on the stored
 tree `storeC` (S8's queries carry the exact centre, which the signer does not compute).
@@ -24,13 +29,15 @@ tree `storeC` (S8's queries carry the exact centre, which the signer does not co
 the executable signer's world (`execImpl`), for admissible choices without range checks
 (`C.rchk = none`, the check of `runX`), at `C.qinv = w77`. `OutX`, `LeafX`: outputs and leaf
 centres of `ffsX` for sampler answers within `W` of `⌊t̄⌋` (tape `tapeS`); the word theorems
-`leafX_im`, `signX_word`, `sign32_eq_sign64` are in `Exec.SignRange`. `pathSum_signLoopX`: a loop of
-cap `N` makes at most `N` signing queries.
+`leafX_im`, `signX_word`, `sign32_eq_sign64` are in `Exec.SignRange`. `pathSum_signLoopX`: a
+restart loop of cap `N` (not the table cutoff) makes at most `N` signing queries.
 
 Not proved here: `ffsX_refines` at depth `L ≥ 10` (false: `arithX`'s tables are exact above level
-8; it is stated for `L ≤ 9`); hop B for range checks (`C.rchk = some R`: `runX` has none); a Lean
-term `Adm C` for a concrete `C` (`twOk` is true only by `#eval` of `twOkFast`); that the whole
-signer `signMsgX` (loop, salt, norm check) is the hop-B experiment (only the attempt `signX` is its
+8; it is stated for `L ≤ 9`), nor `ffsX_refinesN` at depth `> N` (stated for depth `≤ N`); hop B
+for range checks (`C.rchk = some R`: `runX`, `runX1024` have none); a Lean term `Adm C` or
+`AdmN N C` for a concrete `C` (`twOk` and `twOkN rc 10` are true only by `#eval` of `twOkFast`,
+`twOkFastN`; `twOkN rc N` for `N > 10` is not evaluated); that the whole signer
+`signMsgX` (loop, salt, norm check) is the hop-B experiment (only the attempt `signX` is its
 signing oracle, with the query count `pathSum_signLoopX`); that a key passes `check` (not proved
 for any key); multiply-first, the split path, half-spectrum storage; the sampler (`hE`, `hM`, `hF`);
 32.64 inside hop B without the clamp. -/
@@ -54,35 +61,63 @@ noncomputable def RMode.arith64q (r : RMode) (hr : r ≠ .floor) : (qi : QInv) �
   | .w77 => r.arith64 hr
   | .w64 => (r.toRnd hr).arith64 (1 / 2 ^ 64) (1 / 2 ^ 65) (by positivity) (by norm_num)
 
-/-- The executable merge table (levels `≤ 8`), `ζ` above. -/
-noncomputable def twX (rc : RMode) (L : ℕ) (o : Out L) : ℂ :=
-  if L ≤ 8 then (twB rc 64 L o).c.toC else zeta L o
+/-- The executable merge table at levels `< N`, `ζ` above. -/
+noncomputable def twXN (N : ℕ) (rc : RMode) (L : ℕ) (o : Out L) : ℂ :=
+  if L < N then (twB rc 64 L o).c.toC else zeta L o
 
-/-- The executable split table (levels `≤ 8`), `ζ̄/2` above. -/
-noncomputable def twsX (rc : RMode) (L : ℕ) (o : Out L) : ℂ :=
-  if L ≤ 8 then (twsB rc 64 L o).c.toC else starRingEnd ℂ (zeta L o) / 2
+/-- The executable split table at levels `< N`, `ζ̄/2` above. -/
+noncomputable def twsXN (N : ℕ) (rc : RMode) (L : ℕ) (o : Out L) : ℂ :=
+  if L < N then (twsB rc 64 L o).c.toC else starRingEnd ℂ (zeta L o) / 2
+
+/-- The executable merge table (levels `≤ 8`), `ζ` above: `twXN 9`. -/
+noncomputable def twX (rc : RMode) (L : ℕ) (o : Out L) : ℂ := twXN 9 rc L o
+
+/-- The executable split table (levels `≤ 8`), `ζ̄/2` above: `twsXN 9`. -/
+noncomputable def twsX (rc : RMode) (L : ℕ) (o : Out L) : ℂ := twsXN 9 rc L o
+
+theorem twOkN_rad {rc : RMode} {N : ℕ} (h : twOkN rc N = true) {L : ℕ} (hL : L < N)
+    (o : Out L) :
+    (twB rc 64 L o).radLeB (7072 / 10000 / 2 ^ 64) = true ∧
+      (twsB rc 64 L o).radLeB (7072 / 10000 / 2 ^ 64) = true := by
+  simp only [twOkN, List.all_eq_true, List.mem_range] at h
+  simpa only [Bool.and_eq_true] using (allOut_iff L _).1 (h L hL) o
 
 theorem twOk_rad {rc : RMode} (h : twOk rc = true) {L : ℕ} (hL : L ≤ 8) (o : Out L) :
     (twB rc 64 L o).radLeB (7072 / 10000 / 2 ^ 64) = true ∧
-      (twsB rc 64 L o).radLeB (7072 / 10000 / 2 ^ 64) = true := by
-  simp only [twOk, twOkN, List.all_eq_true, List.mem_range] at h
-  simpa only [Bool.and_eq_true] using (allOut_iff L _).1 (h L (by omega)) o
+      (twsB rc 64 L o).radLeB (7072 / 10000 / 2 ^ 64) = true :=
+  twOkN_rad h (by omega) o
+
+theorem twXN_err64 (N : ℕ) (rc : RMode) (h : twOkN rc N = true) (L : ℕ) (o : Out L) :
+    ‖twXN N rc L o - zeta L o‖ ≤ 7072 / 10000 / 2 ^ 64 := by
+  unfold twXN
+  split_ifs with hL
+  · exact (CB.norm_sub_le_of_radLeB (twB_holds rc 64 L o) (twOkN_rad h hL o).1).trans_eq
+      (by norm_num)
+  · rw [sub_self, norm_zero]; positivity
+
+theorem twsXN_err64 (N : ℕ) (rc : RMode) (h : twOkN rc N = true) (L : ℕ) (o : Out L) :
+    ‖twsXN N rc L o - starRingEnd ℂ (zeta L o) / 2‖ ≤ 7072 / 10000 / 2 ^ 64 := by
+  unfold twsXN
+  split_ifs with hL
+  · exact (CB.norm_sub_le_of_radLeB (twsB_holds rc 64 L o) (twOkN_rad h hL o).2).trans_eq
+      (by norm_num)
+  · rw [sub_self, norm_zero]; positivity
 
 theorem twX_err64 (rc : RMode) (h : twOk rc = true) (L : ℕ) (o : Out L) :
-    ‖twX rc L o - zeta L o‖ ≤ 7072 / 10000 / 2 ^ 64 := by
-  unfold twX
-  split_ifs with hL
-  · exact (CB.norm_sub_le_of_radLeB (twB_holds rc 64 L o) (twOk_rad h hL o).1).trans_eq
-      (by norm_num)
-  · rw [sub_self, norm_zero]; positivity
+    ‖twX rc L o - zeta L o‖ ≤ 7072 / 10000 / 2 ^ 64 :=
+  twXN_err64 9 rc h L o
 
 theorem twsX_err64 (rc : RMode) (h : twOk rc = true) (L : ℕ) (o : Out L) :
-    ‖twsX rc L o - starRingEnd ℂ (zeta L o) / 2‖ ≤ 7072 / 10000 / 2 ^ 64 := by
-  unfold twsX
-  split_ifs with hL
-  · exact (CB.norm_sub_le_of_radLeB (twsB_holds rc 64 L o) (twOk_rad h hL o).2).trans_eq
-      (by norm_num)
-  · rw [sub_self, norm_zero]; positivity
+    ‖twsX rc L o - starRingEnd ℂ (zeta L o) / 2‖ ≤ 7072 / 10000 / 2 ^ 64 :=
+  twsXN_err64 9 rc h L o
+
+/-- Admissible choices for the refinement to `sign164G`, tables decided at levels `< N`. -/
+structure AdmN (N : ℕ) (C : Choices) : Prop where
+  near : C.x.rm ≠ .floor
+  tw : twOkN C.x.rc N = true
+  order : C.target = .scaleFirst
+  word : C.word = none
+  rchk : ∀ R, C.rchk = some R → 1 ≤ R
 
 /-- Admissible choices for the refinement to `sign164G`. -/
 structure Adm (C : Choices) : Prop where
@@ -92,15 +127,22 @@ structure Adm (C : Choices) : Prop where
   word : C.word = none
   rchk : ∀ R, C.rchk = some R → 1 ≤ R
 
-/-- **The executable arithmetic**: `RMode.arith64q` with the executable tables. -/
-noncomputable def arithX (C : Choices) (h : Adm C) : Arith64 C.qinv.εq :=
+/-- `Adm` is `AdmN 9`. -/
+theorem Adm.toN {C : Choices} (h : Adm C) : AdmN 9 C := ⟨h.near, h.tw, h.order, h.word, h.rchk⟩
+
+/-- **The executable arithmetic** with the tables cut at `N`: `RMode.arith64q` with the
+executable tables at levels `< N` (`twXN`, `twsXN`). -/
+noncomputable def arithXN (N : ℕ) (C : Choices) (h : AdmN N C) : Arith64 C.qinv.εq :=
   { RMode.arith64q C.x.rm h.near C.qinv with
-    tw := twX C.x.rc
-    tw_err := fun L o => (twX_err64 C.x.rc h.tw L o).trans (by norm_num)
-    tws := twsX C.x.rc
-    tws_err := fun L o => (twsX_err64 C.x.rc h.tw L o).trans (by norm_num)
-    tw_err64 := twX_err64 C.x.rc h.tw
-    tws_err64 := twsX_err64 C.x.rc h.tw }
+    tw := twXN N C.x.rc
+    tw_err := fun L o => (twXN_err64 N C.x.rc h.tw L o).trans (by norm_num)
+    tws := twsXN N C.x.rc
+    tws_err := fun L o => (twsXN_err64 N C.x.rc h.tw L o).trans (by norm_num)
+    tw_err64 := twXN_err64 N C.x.rc h.tw
+    tws_err64 := twsXN_err64 N C.x.rc h.tw }
+
+/-- **The executable arithmetic**: `RMode.arith64q` with the executable tables (`arithXN 9`). -/
+noncomputable def arithX (C : Choices) (h : Adm C) : Arith64 C.qinv.εq := arithXN 9 C h.toN
 
 /-- The check of `sign164G` for `C.rchk`: none, or S8's `‖vh‖ ≤ R - 1`. -/
 def chkOf : Option ℚ → (L : ℕ) → (Out L → ℂ) → (Out L → ℂ) → Prop
@@ -138,21 +180,22 @@ theorem toReal_qinv64 (r : RMode) : (qinv64 r).toReal = r.rnd (1 / 12289 * 2 ^ 6
 
 section ArithX
 
-variable (C : Choices) (h : Adm C)
+variable (N : ℕ) (C : Choices) (h : AdmN N C)
 
-theorem arithX_mul (z w : Cx 64) :
-    (arithX C h).mul (1 / 2 ^ 64) z.toC w.toC = (z.mul C.x.rm w).toC := by
+theorem arithXN_mul (z w : Cx 64) :
+    (arithXN N C h).mul (1 / 2 ^ 64) z.toC w.toC = (z.mul C.x.rm w).toC := by
   rw [RMode.mul_toC _ h.near]
   obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
   cases qi <;> rfl
 
-theorem arithX_halve (z : Cx 64) :
-    (arithX C h).halve (1 / 2 ^ 64) z.toC = (z.half C.x.rm).toC := by
+theorem arithXN_halve (z : Cx 64) :
+    (arithXN N C h).halve (1 / 2 ^ 64) z.toC = (z.half C.x.rm).toC := by
   rw [RMode.half_toC _ h.near]
   obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
   cases qi <;> rfl
 
-theorem arithX_divq (z : Cx 64) : (arithX C h).divq z.toC = (divqX C.x.rm C.qinv z).toC := by
+theorem arithXN_divq (z : Cx 64) :
+    (arithXN N C h).divq z.toC = (divqX C.x.rm C.qinv z).toC := by
   obtain ⟨x, xn, tg, qi, wd, rc, sm, cap, b2, ib, sc⟩ := C
   cases qi
   · exact RMode.arith64_divq _ h.near z
@@ -162,19 +205,44 @@ theorem arithX_divq (z : Cx 64) : (arithX C h).divq z.toC = (divqX C.x.rm C.qinv
         Complex.mul_re, Complex.mul_im, Complex.ofReal_re, Complex.ofReal_im, mul_zero, sub_zero,
         zero_add]
 
-theorem arithX_tw {L : ℕ} (hL : L ≤ 8) (o : Out L) :
-    (arithX C h).tw L o = (twB C.x.rc 64 L o).c.toC :=
+theorem arithXN_tw {L : ℕ} (hL : L < N) (o : Out L) :
+    (arithXN N C h).tw L o = (twB C.x.rc 64 L o).c.toC :=
   ite_eq_left_of_eq_true _ _ (eq_true hL)
 
-theorem arithX_tws {L : ℕ} (hL : L ≤ 8) (o : Out L) :
-    (arithX C h).tws L o = (twsB C.x.rc 64 L o).c.toC :=
+theorem arithXN_tws {L : ℕ} (hL : L < N) (o : Out L) :
+    (arithXN N C h).tws L o = (twsB C.x.rc 64 L o).c.toC :=
   ite_eq_left_of_eq_true _ _ (eq_true hL)
 
 end ArithX
 
-theorem fftW_toC (C : Choices) (h : Adm C) (L : ℕ) (hL : L ≤ 9) (a : Fin (2 ^ L) → ℤ)
-    (o : Out L) :
-    (fftW C L a o).toC = (arithX C h).fft (1 / 2 ^ 64) L (fun i => (a i : ℂ)) o := by
+section ArithX
+
+variable (C : Choices) (h : Adm C)
+
+theorem arithX_mul (z w : Cx 64) :
+    (arithX C h).mul (1 / 2 ^ 64) z.toC w.toC = (z.mul C.x.rm w).toC :=
+  arithXN_mul 9 C h.toN z w
+
+theorem arithX_halve (z : Cx 64) :
+    (arithX C h).halve (1 / 2 ^ 64) z.toC = (z.half C.x.rm).toC :=
+  arithXN_halve 9 C h.toN z
+
+theorem arithX_divq (z : Cx 64) : (arithX C h).divq z.toC = (divqX C.x.rm C.qinv z).toC :=
+  arithXN_divq 9 C h.toN z
+
+theorem arithX_tw {L : ℕ} (hL : L ≤ 8) (o : Out L) :
+    (arithX C h).tw L o = (twB C.x.rc 64 L o).c.toC :=
+  arithXN_tw 9 C h.toN (by omega) o
+
+theorem arithX_tws {L : ℕ} (hL : L ≤ 8) (o : Out L) :
+    (arithX C h).tws L o = (twsB C.x.rc 64 L o).c.toC :=
+  arithXN_tws 9 C h.toN (by omega) o
+
+end ArithX
+
+theorem fftW_toCN (N : ℕ) (C : Choices) (h : AdmN N C) (L : ℕ) (hL : L ≤ N)
+    (a : Fin (2 ^ L) → ℤ) (o : Out L) :
+    (fftW C L a o).toC = (arithXN N C h).fft (1 / 2 ^ 64) L (fun i => (a i : ℂ)) o := by
   induction L with
   | zero => simp only [fftW, h.word, wordFn, Cx.wr_id, Cx.toC_ofInt, Arith.fft]
   | succ L ih =>
@@ -185,16 +253,28 @@ theorem fftW_toC (C : Choices) (h : Adm C) (L : ℕ) (hL : L ≤ 9) (a : Fin (2 
     erw [memo_eq]
     cases b <;>
       simp only [h.word, wordFn, Cx.wr_id, Cx.mulW_id, Arith.fft, Cx.toC_add, Cx.toC_sub,
-        ← arithX_mul C h, arithX_tw C h (by omega : L ≤ 8), e0, e1, Bool.false_eq_true,
+        ← arithXN_mul N C h, arithXN_tw N C h (by omega : L < N), e0, e1, Bool.false_eq_true,
         ↓reduceIte] <;> rfl
+
+theorem fftW_toC (C : Choices) (h : Adm C) (L : ℕ) (hL : L ≤ 9) (a : Fin (2 ^ L) → ℤ)
+    (o : Out L) :
+    (fftW C L a o).toC = (arithX C h).fft (1 / 2 ^ 64) L (fun i => (a i : ℂ)) o :=
+  fftW_toCN 9 C h.toN L hL a o
+
+theorem targetX_toCN (N : ℕ) (C : Choices) (h : AdmN N C) {logn : ℕ} (hN : logn ≤ N)
+    {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ} (K : KeyP logn γf γF σlo hlo Λ)
+    (c : ZPoly logn) :
+    t0C64 (arithXN N C h) K c = (fun o => ((targetX C K.f K.F c).1 o).toC) ∧
+      t1C64 (arithXN N C h) K c = fun o => ((targetX C K.f K.F c).2 o).toC := by
+  simp only [targetX, h.order, h.word, wordFn, memo_eq, Cx.wr_id, Cx.mulW_id]
+  refine ⟨funext fun o => ?_, funext fun o => ?_⟩ <;>
+    simp only [t0C64, t1C64, cqC64, chC64, ← arithXN_mul N C h, Cx.toC_neg,
+      ← arithXN_divq N C h, fftW_toCN N C h logn hN]
 
 theorem targetX_toC (C : Choices) (h : Adm C) (K : Key) (c : ZPoly) :
     t0C64 (arithX C h) K c = (fun o => ((targetX C K.f K.F c).1 o).toC) ∧
-      t1C64 (arithX C h) K c = fun o => ((targetX C K.f K.F c).2 o).toC := by
-  simp only [targetX, h.order, h.word, wordFn, memo_eq, Cx.wr_id, Cx.mulW_id]
-  refine ⟨funext fun o => ?_, funext fun o => ?_⟩ <;>
-    simp only [t0C64, t1C64, cqC64, chC64, ← arithX_mul C h, Cx.toC_neg, ← arithX_divq C h,
-      fftW_toC C h 9 le_rfl]
+      t1C64 (arithX C h) K c = fun o => ((targetX C K.f K.F c).2 o).toC :=
+  targetX_toCN 9 C h.toN le_rfl K c
 
 variable {ιA : Type} {aux : OracleSpec.{0, 0} ιA}
 
@@ -210,42 +290,69 @@ theorem leaf_toSamp (z0 z1 : ℤ) :
 
 section ToC
 
-variable (C : Choices) (h : Adm C)
+variable (N : ℕ) (C : Choices) (h : AdmN N C)
 
-theorem splitW_toC {L : ℕ} (hL : L ≤ 8) (t : Out (L + 1) → Cx 64) :
-    splitCU (arithX C h).toArith (1 / 2 ^ 64) (fun o => (t o).toC) =
+theorem splitW_toCN {L : ℕ} (hL : L < N) (t : Out (L + 1) → Cx 64) :
+    splitCU (arithXN N C h).toArith (1 / 2 ^ 64) (fun o => (t o).toC) =
       (fun o => ((splitW C L t).1 o).toC, fun o => ((splitW C L t).2 o).toC) := by
   simp only [splitCU, splitW, memo_eq, h.word, wordFn, Cx.wr_id, Cx.mulW_id, Cx.toC_add,
-    Cx.toC_sub, ← arithX_mul C h, ← arithX_halve C h, arithX_tws C h hL]
+    Cx.toC_sub, ← arithXN_mul N C h, ← arithXN_halve N C h, arithXN_tws N C h hL]
 
-theorem mergeW_toC {L : ℕ} (hL : L ≤ 8) (s : SampX L) :
-    mergeCU (arithX C h).toArith (1 / 2 ^ 64) s.toSamp = fun x => (mergeW C L s.c0 s.c1 x).toC := by
+theorem mergeW_toCN {L : ℕ} (hL : L < N) (s : SampX L) :
+    mergeCU (arithXN N C h).toArith (1 / 2 ^ 64) s.toSamp =
+      fun x => (mergeW C L s.c0 s.c1 x).toC := by
   funext x
   obtain ⟨o, b⟩ := (x : Out L × Bool)
   simp only [mergeW]
   erw [memo_eq]
   cases b <;>
     simp only [mergeCU, mergeL, SampX.toSamp, h.word, wordFn, Cx.wr_id, Cx.mulW_id, Cx.toC_add,
-      Cx.toC_sub, ← arithX_mul C h, arithX_tw C h hL, Bool.false_eq_true, ↓reduceIte]
+      Cx.toC_sub, ← arithXN_mul N C h, arithXN_tw N C h hL, Bool.false_eq_true, ↓reduceIte]
 
-theorem updW_toC {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) :
-    updCU (arithX C h).toArith (1 / 2 ^ 64) (fun o => (t0 o).toC) (fun o => (t1 o).toC)
+theorem updW_toCN {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) :
+    updCU (arithXN N C h).toArith (1 / 2 ^ 64) (fun o => (t0 o).toC) (fun o => (t1 o).toC)
         (fun o => (z o).toC) (fun o => (ℓ o).toC) = fun o => (updW C t0 t1 z ℓ o).toC := by
   funext o
   simp only [updW]
   erw [memo_eq]
   simp only [updCU, h.word, wordFn, Cx.wr_id, Cx.mulW_id, Cx.toC_add, Cx.toC_sub,
-    ← arithX_mul C h]
+    ← arithXN_mul N C h]
 
-theorem joinU_toSamp {L : ℕ} (hL : L ≤ 8) (s0 s1 : SampX L) :
-    joinU (arithX C h).toArith (1 / 2 ^ 64) s0.toSamp s1.toSamp =
+theorem joinU_toSampN {L : ℕ} (hL : L < N) (s0 s1 : SampX L) :
+    joinU (arithXN N C h).toArith (1 / 2 ^ 64) s0.toSamp s1.toSamp =
       SampX.toSamp ⟨ilv s0.z0 s0.z1, ilv s1.z0 s1.z1, mergeW C L s0.c0 s0.c1,
         mergeW C L s1.c0 s1.c1⟩ := by
   have e : ∀ s : SampX L, mergeE s.toSamp =
       fun x => evalAt (fun i => (ilv s.z0 s.z1 i : ℂ)) (pt (L + 1) x) :=
     fun s => mergeL_ilv s.z0 s.z1
-  rw [joinU, e, e, mergeW_toC C h hL, mergeW_toC C h hL]
+  rw [joinU, e, e, mergeW_toCN N C h hL, mergeW_toCN N C h hL]
   rfl
+
+end ToC
+
+section ToC
+
+variable (C : Choices) (h : Adm C)
+
+theorem splitW_toC {L : ℕ} (hL : L ≤ 8) (t : Out (L + 1) → Cx 64) :
+    splitCU (arithX C h).toArith (1 / 2 ^ 64) (fun o => (t o).toC) =
+      (fun o => ((splitW C L t).1 o).toC, fun o => ((splitW C L t).2 o).toC) :=
+  splitW_toCN 9 C h.toN (by omega) t
+
+theorem mergeW_toC {L : ℕ} (hL : L ≤ 8) (s : SampX L) :
+    mergeCU (arithX C h).toArith (1 / 2 ^ 64) s.toSamp = fun x => (mergeW C L s.c0 s.c1 x).toC :=
+  mergeW_toCN 9 C h.toN (by omega) s
+
+theorem updW_toC {L : ℕ} (t0 t1 z ℓ : Out L → Cx 64) :
+    updCU (arithX C h).toArith (1 / 2 ^ 64) (fun o => (t0 o).toC) (fun o => (t1 o).toC)
+        (fun o => (z o).toC) (fun o => (ℓ o).toC) = fun o => (updW C t0 t1 z ℓ o).toC :=
+  updW_toCN 9 C h.toN t0 t1 z ℓ
+
+theorem joinU_toSamp {L : ℕ} (hL : L ≤ 8) (s0 s1 : SampX L) :
+    joinU (arithX C h).toArith (1 / 2 ^ 64) s0.toSamp s1.toSamp =
+      SampX.toSamp ⟨ilv s0.z0 s0.z1, ilv s1.z0 s1.z1, mergeW C L s0.c0 s0.c1,
+        mergeW C L s1.c0 s1.c1⟩ :=
+  joinU_toSampN 9 C h.toN (by omega) s0 s1
 
 end ToC
 
@@ -256,40 +363,45 @@ theorem simulateQ_query_inr {m : Type → Type*} [Monad m] [LawfulMonad m]
   simulateQ_spec_query (impl := impl) (Sum.inr q)
 
 open Classical in
-/-- **`ffsX` is `ffsG`** on trees of depth `≤ 9` (the executable tables), every output mapped by
+/-- **`ffsX` is `ffsG`** with the tables cut at `N`, on trees of depth `≤ N` whose stored values
+pass `CTree.Ok σlo Λq` (as `FTreeP σl hlo Λ` by `toFTreeP`), every output mapped by
 `SampX.toSamp`. -/
-theorem ffsX_toSamp (C : Choices) (h : Adm C) {m : Type → Type*} [Monad m] [LawfulMonad m]
-    (impl : QueryImpl (FalconGame.spec aux Falcon.CallP) m) (samp : Fx 64 → Fx 64 → m ℤ)
+theorem ffsX_toSampN (N : ℕ) (C : Choices) (h : AdmN N C) {m : Type → Type*} [Monad m]
+    [LawfulMonad m] (impl : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (samp : Fx 64 → Fx 64 → m ℤ)
     (himpl : ∀ (σ t : Fx 64) (q : Falcon.CallP), q.σbar = σ.toReal → q.tbar = t.toReal →
-      (impl (.inr q) : m ℤ) = samp σ t) :
-    ∀ {L : ℕ} (T : CTree 64 L) (hT : T.Ok) (_ : L ≤ 9) (t0 t1 : Out L → ℂ)
+      (impl (.inr q) : m ℤ) = samp σ t)
+    {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ} {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo)
+    (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L) :
+    ∀ {L : ℕ} (T : CTree 64 L) (hT : T.Ok σlo Λq) (_ : L ≤ N) (t0 t1 : Out L → ℂ)
       (t0h t1h : Out L → Cx 64),
-      simulateQ impl (ffsG (aux := aux) (arithX C h).toArith (1 / 2 ^ 64) (chkOf C.rchk)
-          (T.toFTree hT) t0 t1 (fun o => (t0h o).toC) (fun o => (t1h o).toC)) =
+      simulateQ impl (ffsG (aux := aux) (arithXN N C h).toArith (1 / 2 ^ 64) (chkOf C.rchk)
+          (T.toFTreeP (hlo := hlo) hσ hΛ hT) t0 t1 (fun o => (t0h o).toC)
+          (fun o => (t1h o).toC)) =
         (fun r => r.map SampX.toSamp) <$> ffsX C samp T t0h t1h
   | _, .leaf σ, _, _, t0, t1, t0h, t1h => by
     have hq : ∀ (t : Fx 64) (x : ℝ) hσ,
         (impl (.inr (Falcon.CallP.stored σ.toReal x t.toReal hσ)) : m ℤ) = samp σ t :=
       fun t _ _ => himpl σ t _ rfl rfl
-    simp only [CTree.toFTree, ffsG, ffsX, simulateQ_bind, simulateQ_pure, Cx.toC_re, map_bind,
+    simp only [CTree.toFTreeP, ffsG, ffsX, simulateQ_bind, simulateQ_pure, Cx.toC_re, map_bind,
       map_pure, Option.map_some, leaf_toSamp]
     rw [simulateQ_query_inr, simulateQ_query_inr, hq, hq]
   | _, @CTree.node _ L ℓ T0 T1, hT, hL, t0, t1, t0h, t1h => by
-    have hL8 : L ≤ 8 := by omega
-    simp only [CTree.toFTree, ffsG, ffsX]
+    have hLN : L < N := by omega
+    simp only [CTree.toFTreeP, ffsG, ffsX]
     by_cases c1 : chkX C.rchk (L + 1) t1h = true
     swap
     · have c1' := mt (chkX_iff C.rchk h.rchk (L + 1) t1h t1).2 c1
       simp only [c1, c1', Bool.false_eq_true, ↓reduceIte, simulateQ_pure, map_pure,
         Option.map_none]
     have c1' := (chkX_iff C.rchk h.rchk (L + 1) t1h t1).1 c1
-    simp only [c1, c1', ↓reduceIte, splitW_toC C h hL8]
-    rw [simulateQ_bind, ffsX_toSamp C h impl samp himpl T1 hT.2.2 (by omega), map_bind,
+    simp only [c1, c1', ↓reduceIte, splitW_toCN N C h hLN]
+    rw [simulateQ_bind, ffsX_toSampN N C h impl samp himpl hσ hΛ T1 hT.2.2 (by omega), map_bind,
       bind_map_left]
     refine bind_congr fun r1 => ?_
     rcases r1 with _ | x1
     · simp only [Option.map_none, Option.elim, simulateQ_pure, map_pure]
-    simp only [Option.map_some, Option.elim, mergeW_toC C h hL8, updW_toC C h]
+    simp only [Option.map_some, Option.elim, mergeW_toCN N C h hLN, updW_toCN N C h]
     have e1 := chkX_iff C.rchk h.rchk L x1.c1 x1.toSamp.e1
     have e2 := chkX_iff C.rchk h.rchk (L + 1) (updW C t0h t1h (mergeW C L x1.c0 x1.c1) ℓ)
       (upd t0 t1 (mergeE x1.toSamp) fun o => (ℓ o).toC)
@@ -305,8 +417,8 @@ theorem ffsX_toSamp (C : Choices) (h : Adm C) {m : Type → Type*} [Monad m] [La
     have c2' : chkOf C.rchk L x1.toSamp.c1 x1.toSamp.e1 ∧
         chkOf C.rchk (L + 1) (fun o => (updW C t0h t1h (mergeW C L x1.c0 x1.c1) ℓ o).toC)
           (upd t0 t1 (mergeE x1.toSamp) fun o => (ℓ o).toC) := ⟨e1.1 c2.1, e2.1 c2.2⟩
-    simp only [Bool.and_eq_true, c2, c2', and_self, ↓reduceIte, splitW_toC C h hL8]
-    rw [simulateQ_bind, ffsX_toSamp C h impl samp himpl T0 hT.2.1 (by omega), map_bind,
+    simp only [Bool.and_eq_true, c2, c2', and_self, ↓reduceIte, splitW_toCN N C h hLN]
+    rw [simulateQ_bind, ffsX_toSampN N C h impl samp himpl hσ hΛ T0 hT.2.1 (by omega), map_bind,
       bind_map_left]
     refine bind_congr fun r0 => ?_
     rcases r0 with _ | x0
@@ -320,10 +432,48 @@ theorem ffsX_toSamp (C : Choices) (h : Adm C) {m : Type → Type*} [Monad m] [La
         Option.map_none]
     have c3' : chkOf C.rchk L x0.toSamp.c1 x0.toSamp.e1 := e0.1 c3
     simp only [c3, c3', ↓reduceIte, simulateQ_pure, map_pure, Option.map_some,
-      joinU_toSamp C h hL8]
+      joinU_toSampN N C h hLN]
+
+open Classical in
+/-- **`ffsX` is `ffsG`** on trees of depth `≤ 9` (the executable tables), every output mapped by
+`SampX.toSamp`. -/
+theorem ffsX_toSamp (C : Choices) (h : Adm C) {m : Type → Type*} [Monad m] [LawfulMonad m]
+    (impl : QueryImpl (FalconGame.spec aux Falcon.CallP) m) (samp : Fx 64 → Fx 64 → m ℤ)
+    (himpl : ∀ (σ t : Fx 64) (q : Falcon.CallP), q.σbar = σ.toReal → q.tbar = t.toReal →
+      (impl (.inr q) : m ℤ) = samp σ t) :
+    ∀ {L : ℕ} (T : CTree 64 L) (hT : T.Ok) (_ : L ≤ 9) (t0 t1 : Out L → ℂ)
+      (t0h t1h : Out L → Cx 64),
+      simulateQ impl (ffsG (aux := aux) (arithX C h).toArith (1 / 2 ^ 64) (chkOf C.rchk)
+          (T.toFTree hT) t0 t1 (fun o => (t0h o).toC) (fun o => (t1h o).toC)) =
+        (fun r => r.map SampX.toSamp) <$> ffsX C samp T t0h t1h := by
+  intro L T hT hL t0 t1 t0h t1h
+  rw [CTree.toFTree_eq_toFTreeP (by norm_num) lam512q_bounds]
+  exact ffsX_toSampN 9 C h.toN impl samp himpl _ _ T hT hL t0 t1 t0h t1h
+
+/-- **`ffsX` refines `ffsG`** with the tables cut at `N`, on trees of depth `≤ N` (as
+`FTreeP σl hlo Λ` by `toFTreeP`). -/
+theorem ffsX_refinesN (N : ℕ) (C : Choices) (h : AdmN N C) {m : Type → Type*} [Monad m]
+    [LawfulMonad m] (impl : QueryImpl (FalconGame.spec aux Falcon.CallP) m)
+    (samp : Fx 64 → Fx 64 → m ℤ)
+    (himpl : ∀ (σ t : Fx 64) (q : Falcon.CallP), q.σbar = σ.toReal → q.tbar = t.toReal →
+      (impl (.inr q) : m ℤ) = samp σ t)
+    {σlo : ℚ} {Λq : ℕ → ℚ} {σl : ℝ} {hlo : 12778 / 10000 ≤ σl} {Λ : ℕ → ℝ} (hσ : σl ≤ σlo)
+    (hΛ : ∀ L, 0 ≤ Λq L ∧ (Λq L : ℝ) ≤ Λ L)
+    {L : ℕ} (hL : L ≤ N) (T : CTree 64 L) (hT : T.Ok σlo Λq) (t0 t1 : Out L → ℂ)
+    (t0h t1h : Out L → Cx 64) :
+    (fun r => r.map fun s => (s.z0, s.z1)) <$> simulateQ impl
+        (ffsG (aux := aux) (arithXN N C h).toArith (1 / 2 ^ 64) (chkOf C.rchk)
+          (T.toFTreeP (hlo := hlo) hσ hΛ hT) t0 t1 (fun o => (t0h o).toC)
+          (fun o => (t1h o).toC)) =
+      (fun r => r.map fun s => (s.z0, s.z1)) <$> ffsX C samp T t0h t1h := by
+  rw [ffsX_toSampN N C h impl samp himpl hσ hΛ T hT hL, Functor.map_map]
+  congr 1
+  funext r
+  cases r <;> rfl
 
 /-- **`ffsX` refines `ffsG`** on trees of depth `≤ 9` (not stated for `L ≥ 10`: `arithX`'s tables
-are exact above level 8, `splitW`, `mergeW` use the rounded ones at every level). -/
+are exact above level 8, `splitW`, `mergeW` use the rounded ones at every level; at depth `≤ N`
+with `arithXN N`: `ffsX_refinesN`). -/
 theorem ffsX_refines (C : Choices) (h : Adm C) {m : Type → Type*} [Monad m] [LawfulMonad m]
     (impl : QueryImpl (FalconGame.spec aux Falcon.CallP) m) (samp : Fx 64 → Fx 64 → m ℤ)
     (himpl : ∀ (σ t : Fx 64) (q : Falcon.CallP), q.σbar = σ.toReal → q.tbar = t.toReal →

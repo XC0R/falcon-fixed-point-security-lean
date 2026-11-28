@@ -166,7 +166,7 @@ def div4 (a b : ℤ) : List ℤ :=
 -- 32.64 and 64.64: same bits in a 96-bit and a 128-bit word when in range 32
 /-- info: true -/
 #guard_msgs in
-#eval decide (decide ((⟨3 * 2 ^ 63⟩ : Fx 64).InRange 32))
+#eval decide ((⟨3 * 2 ^ 63⟩ : Fx 64).InRange 32)
 /-- info: true -/
 #guard_msgs in
 #eval decide (Fx.wrap 95 (3 * 2 ^ 63) = Fx.wrap 127 (3 * 2 ^ 63))

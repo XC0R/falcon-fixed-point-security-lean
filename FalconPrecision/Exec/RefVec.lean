@@ -29,6 +29,11 @@ ffSampling (`Exec.RefRun`), radii on the grid `2⁻⁹⁶`.
 * `opsE_fft`: the exact FFT is evaluation at `pt L o`; `pt_angle`: `pt L o = exp(iπ·k/2^L)`,
   `k = slotK L o`.
 
+At every size `2^N`, on a ball tree `T` given as a parameter: `refVecBT N T`, `refVecBT_sound`
+(`twOkN C.x.rc N`, `T` holding the stored tree at its centres), `refVecBT_word` (`magOkBP`),
+`refVecBT_exact`, `signX_logP`; the Falcon-512 statements are their instances at `N = 9` on
+`refTree δq k`, the Falcon-1024 ones (`Exec.RefVec1024`) at `N = 10`.
+
 Not proved here: that `refVecB … = some V` (by `#eval` in the generation runs) or that a key passes
 `check`; what holds for sampler answers other than the tape. -/
 
@@ -37,6 +42,7 @@ Not proved here: that `refVecB … = some V` (by `#eval` in the generation runs)
 namespace FalconPrecision.Exec
 
 open FalconPrecision.Errors.FFTRec FalconPrecision.Errors.FFTDef FalconPrecision.Errors.Fixed
+  FalconPrecision.Errors.HopB
 
 /-! ## Traces -/
 
@@ -79,16 +85,58 @@ def refRawA (δq : ℕ → ℚ) (k : RawKey) (c z0 z1 : ZPoly) : SignT MB :=
   let t1 := ofArr 9 (toArr 9 fun o => hullM (ofArr 9 tS.2 o) (ofArr 9 tM.2 o))
   ⟨ch, fh, Fh, t0, t1, O.runA (refTree δq k) t0 t1 z0 z1⟩
 
-theorem refRawA_eq (δq : ℕ → ℚ) (k : RawKey) (c z0 z1 : ZPoly) :
-    refRawA δq k c z0 z1 = refRaw δq k c z0 z1 := by
-  have e := fun τ ch fh Fh => VOps.ofArr_targetA opsB τ ch fh Fh
-  simp only [refRawA, refRaw, opsB] at e ⊢
+/-- The ball trace on the tree `T` at size `2^N` (tables `opsBN N`) before rounding the radii. -/
+def refRawT (N : ℕ) (T : GTree MB N) (k : RawKey N) (c z0 z1 : ZPoly N) : SignT MB N :=
+  let O := opsBN N
+  let ch := O.fft N c
+  let fh := O.fft N k.f
+  let Fh := O.fft N k.F
+  let tS := O.target .scaleFirst ch fh Fh
+  let tM := O.target .multiplyFirst ch fh Fh
+  let t0 := fun o => hullM (tS.1 o) (tM.1 o)
+  let t1 := fun o => hullM (tS.2 o) (tM.2 o)
+  ⟨ch, fh, Fh, t0, t1, O.run T t0 t1 z0 z1⟩
+
+/-- `refRawT` on arrays. -/
+def refRawAT (N : ℕ) (T : GTree MB N) (k : RawKey N) (c z0 z1 : ZPoly N) : SignT MB N :=
+  let O := opsBN N
+  let ch := ofArr N (O.fftA N c)
+  let fh := ofArr N (O.fftA N k.f)
+  let Fh := ofArr N (O.fftA N k.F)
+  let tS := O.targetA .scaleFirst ch fh Fh
+  let tM := O.targetA .multiplyFirst ch fh Fh
+  let t0 := ofArr N (toArr N fun o => hullM (ofArr N tS.1 o) (ofArr N tM.1 o))
+  let t1 := ofArr N (toArr N fun o => hullM (ofArr N tS.2 o) (ofArr N tM.2 o))
+  ⟨ch, fh, Fh, t0, t1, O.runA T t0 t1 z0 z1⟩
+
+theorem refRawAT_eq (N : ℕ) (T : GTree MB N) (k : RawKey N) (c z0 z1 : ZPoly N) :
+    refRawAT N T k c z0 z1 = refRawT N T k c z0 z1 := by
+  have e := fun τ ch fh Fh => VOps.ofArr_targetAP (opsBN N) (logn := N) τ ch fh Fh
+  simp only [refRawAT, refRawT] at e ⊢
   simp only [VOps.ofArr_fftA, e, ofArr_toArr, VOps.runA_eq]
+
+theorem refRawA_eq (δq : ℕ → ℚ) (k : RawKey) (c z0 z1 : ZPoly) :
+    refRawA δq k c z0 z1 = refRaw δq k c z0 z1 :=
+  refRawAT_eq 9 (refTree δq k) k c z0 z1
+
+/-- **The reference vector on the tree `T`** at size `2^N`: `none` unless every radius is known
+and `fG - gF = q`. -/
+def refVecBT (N : ℕ) (T : GTree MB N) (k : RawKey N) (c z0 z1 : ZPoly N) :
+    Option (SignT MB N) :=
+  let V := (refRawAT N T k c z0 z1).map coarseM
+  if V.allB (fun b => b.b.r.isSome) && ntruB k then some V else none
 
 /-- **The reference vector**: `none` unless every radius is known and `fG - gF = q`. -/
 def refVecB (δq : ℕ → ℚ) (k : RawKey) (c z0 z1 : ZPoly) : Option (SignT MB) :=
   let V := (refRawA δq k c z0 z1).map coarseM
   if V.allB (fun b => b.b.r.isSome) && ntruB k then some V else none
+
+theorem refVecB_eq (δq : ℕ → ℚ) (k : RawKey) (c z0 z1 : ZPoly) :
+    refVecB δq k c z0 z1 = refVecBT 9 (refTree δq k) k c z0 z1 := rfl
+
+/-- `magOkB` at every size. -/
+def SignT.magOkBP {logn : ℕ} (τ : Target) (i : ℕ) (V : SignT MB logn) : Bool :=
+  V.allB fun b => b.b.r.isSome && decide (MB.m τ b < 2 ^ (i - 1))
 
 /-- Every radius known and every operation magnitude of the order `τ` below `2^(i-1)`. -/
 def SignT.magOkB (τ : Target) (i : ℕ) (V : SignT MB) : Bool :=
@@ -97,24 +145,60 @@ def SignT.magOkB (τ : Target) (i : ℕ) (V : SignT MB) : Bool :=
 theorem MB.m_coarseM (τ : Target) (a : MB) : MB.m τ (coarseM a) = MB.m τ a := by
   cases τ <;> rfl
 
-theorem refVecB_spec {δq : ℕ → ℚ} {k : RawKey} {c z0 z1 : ZPoly} {V : SignT MB}
-    (h : refVecB δq k c z0 z1 = some V) :
-    V = (refRaw δq k c z0 z1).map coarseM ∧ V.allB (fun b => b.b.r.isSome) = true ∧
+theorem refVecBT_spec {N : ℕ} {T : GTree MB N} {k : RawKey N} {c z0 z1 : ZPoly N}
+    {V : SignT MB N} (h : refVecBT N T k c z0 z1 = some V) :
+    V = (refRawT N T k c z0 z1).map coarseM ∧ V.allB (fun b => b.b.r.isSome) = true ∧
       ntruB k = true := by
   revert h
-  simp only [refVecB]
+  simp only [refVecBT]
   split_ifs with hb
   · intro h
     obtain rfl := Option.some.inj h
     simp only [Bool.and_eq_true] at hb
-    rw [refRawA_eq] at hb ⊢
+    rw [refRawAT_eq] at hb ⊢
     exact ⟨rfl, hb.1, hb.2⟩
   · intro h
     cases h
 
+theorem refVecB_spec {δq : ℕ → ℚ} {k : RawKey} {c z0 z1 : ZPoly} {V : SignT MB}
+    (h : refVecB δq k c z0 z1 = some V) :
+    V = (refRaw δq k c z0 z1).map coarseM ∧ V.allB (fun b => b.b.r.isSome) = true ∧
+      ntruB k = true :=
+  refVecBT_spec h
+
 theorem CB.hull_isSome {f : ℕ} {a b : CB f} (h : (a.hull b).r.isSome = true) :
     a.r.isSome = true ∧ b.r.isSome = true := by
   cases ha : a.r <;> cases hb : b.r <;> simp_all [CB.hull]
+
+/-- The ball trace on `T` relates to every run of `P` whose operations (tables at levels `< N`)
+and tree it simulates; the target hull needs only the lemma of the order `τ`. -/
+theorem refRawT_rel {W : Type} [Inhabited W] {P : VOps W} {R : MB → W → Prop} (N : ℕ)
+    (h : VSimN N (opsBN N) P R) (τ : Target)
+    (hS : τ = .scaleFirst → ∀ a b x, R a x → R (hullM a b) x)
+    (hM : τ = .multiplyFirst → ∀ a b x, R b x → R (hullM a b) x) (T : GTree MB N)
+    (k : RawKey N) (c z0 z1 : ZPoly N) (T' : GTree W N) (hT : T.Rel R T') :
+    (refRawT N T k c z0 z1).Rel R (P.sign τ T' k.f k.F c z0 z1) := by
+  have hc := fft_simN h N le_rfl c
+  have hf := fft_simN h N le_rfl k.f
+  have hF := fft_simN h N le_rfl k.F
+  have tS := target_simN h .scaleFirst _ _ _ _ _ _ hc hf hF
+  have tM := target_simN h .multiplyFirst _ _ _ _ _ _ hc hf hF
+  have ht : ∀ o, R (hullM (((opsBN N).target .scaleFirst ((opsBN N).fft N c)
+        ((opsBN N).fft N k.f) ((opsBN N).fft N k.F)).1 o) (((opsBN N).target .multiplyFirst
+        ((opsBN N).fft N c) ((opsBN N).fft N k.f) ((opsBN N).fft N k.F)).1 o))
+        ((P.target τ (P.fft N c) (P.fft N k.f) (P.fft N k.F)).1 o) ∧
+      R (hullM (((opsBN N).target .scaleFirst ((opsBN N).fft N c)
+        ((opsBN N).fft N k.f) ((opsBN N).fft N k.F)).2 o) (((opsBN N).target .multiplyFirst
+        ((opsBN N).fft N c) ((opsBN N).fft N k.f) ((opsBN N).fft N k.F)).2 o))
+        ((P.target τ (P.fft N c) (P.fft N k.f) (P.fft N k.F)).2 o) := by
+    intro o
+    cases τ
+    · exact ⟨hS rfl _ _ _ (tS o).1, hS rfl _ _ _ (tS o).2⟩
+    · exact ⟨hM rfl _ _ _ (tM o).1, hM rfl _ _ _ (tM o).2⟩
+  unfold SignT.Rel refRawT VOps.sign
+  dsimp only
+  exact ⟨fun o => ⟨hc o, hf o, hF o, (ht o).1, (ht o).2⟩,
+    run_simN h T T' le_rfl hT _ _ _ _ ht z0 z1⟩
 
 /-- The ball trace relates to every run of `P` whose operations and tree it simulates; the target
 hull needs only the lemma of the order `τ`. -/
@@ -123,40 +207,70 @@ theorem refRaw_rel {W : Type} [Inhabited W] {P : VOps W} {R : MB → W → Prop}
     (hS : τ = .scaleFirst → ∀ a b x, R a x → R (hullM a b) x)
     (hM : τ = .multiplyFirst → ∀ a b x, R b x → R (hullM a b) x) (δq : ℕ → ℚ) (k : RawKey)
     (c z0 z1 : ZPoly) (T' : GTree W 9) (hT : (refTree δq k).Rel R T') :
-    (refRaw δq k c z0 z1).Rel R (P.sign τ T' k.f k.F c z0 z1) := by
-  have hc := fft_sim h 9 le_rfl c
-  have hf := fft_sim h 9 le_rfl k.f
-  have hF := fft_sim h 9 le_rfl k.F
-  have tS := target_sim h .scaleFirst _ _ _ _ _ _ hc hf hF
-  have tM := target_sim h .multiplyFirst _ _ _ _ _ _ hc hf hF
-  have ht : ∀ o,
-      R (hullM ((opsB.target .scaleFirst (opsB.fft 9 c) (opsB.fft 9 k.f) (opsB.fft 9 k.F)).1 o)
-        ((opsB.target .multiplyFirst (opsB.fft 9 c) (opsB.fft 9 k.f) (opsB.fft 9 k.F)).1 o))
-        ((P.target τ (P.fft 9 c) (P.fft 9 k.f) (P.fft 9 k.F)).1 o) ∧
-      R (hullM ((opsB.target .scaleFirst (opsB.fft 9 c) (opsB.fft 9 k.f) (opsB.fft 9 k.F)).2 o)
-        ((opsB.target .multiplyFirst (opsB.fft 9 c) (opsB.fft 9 k.f) (opsB.fft 9 k.F)).2 o))
-        ((P.target τ (P.fft 9 c) (P.fft 9 k.f) (P.fft 9 k.F)).2 o) := by
-    intro o
-    cases τ
-    · exact ⟨hS rfl _ _ _ (tS o).1, hS rfl _ _ _ (tS o).2⟩
-    · exact ⟨hM rfl _ _ _ (tM o).1, hM rfl _ _ _ (tM o).2⟩
-  unfold SignT.Rel refRaw VOps.sign
-  dsimp only
-  exact ⟨fun o => ⟨hc o, hf o, hF o, (ht o).1, (ht o).2⟩,
-    run_sim h (refTree δq k) T' le_rfl hT _ _ _ _ ht z0 z1⟩
+    (refRaw δq k c z0 z1).Rel R (P.sign τ T' k.f k.F c z0 z1) :=
+  refRawT_rel 9 h.toN τ hS hM (refTree δq k) k c z0 z1 T' hT
 
 /-! ## Soundness -/
+
+/-- **Reference vectors on a ball tree, every unbounded design point with `twOkN C.x.rc N`**: if
+the ball tree `T` holds the stored tree `S` at its centres, every intermediate of the attempt at
+`C` on `S` conditioned on `(z0, z1)` lies in its ball. -/
+theorem refVecBT_sound (N : ℕ) (C : Choices) (hw : C.word = none) (htw : twOkN C.x.rc N = true)
+    (T : GTree MB N) (S : CTree 64 N) (hT : T.Rel RX S.toG) (k : RawKey N) (c z0 z1 : ZPoly N)
+    (V : SignT MB N) (hV : refVecBT N T k c z0 z1 = some V) :
+    V.Rel RX ((opsX C).sign C.target S.toG k.f k.F c z0 z1) := by
+  obtain ⟨rfl, -, -⟩ := refVecBT_spec hV
+  exact SignT.Rel.map_leftP coarseM (fun _ _ h => CB.Holds.coarse h) _ _
+    (refRawT_rel N (simXN N C hw htw) C.target (fun _ _ b _ h => CB.Holds.hull_left b.b h)
+      (fun _ a _ _ h => CB.Holds.hull_right a.b h) T k c z0 z1 _ hT)
+
+/-- **Reference vectors on a ball tree, words**: at `(i + 64)`-bit words, when every operation
+magnitude of the order `C.target` in the vector is below `2^(i-1)`, every intermediate lies in its
+ball. -/
+theorem refVecBT_word (N : ℕ) (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i)
+    (htw : twOkN C.x.rc N = true) (T : GTree MB N) (S : CTree 64 N) (hT : T.Rel RX S.toG)
+    (k : RawKey N) (c z0 z1 : ZPoly N) (V : SignT MB N) (hV : refVecBT N T k c z0 z1 = some V)
+    (hm : V.magOkBP C.target i = true) :
+    V.Rel RX ((opsX C).sign C.target S.toG k.f k.F c z0 z1) := by
+  obtain ⟨rfl, -, -⟩ := refVecBT_spec hV
+  have hT' : T.Rel (RW C.target i) (S.toG.map fun x => (x, x)) :=
+    GTree.Rel.map_right _ (fun _ _ h => ⟨h, fun _ _ => rfl⟩) _ _ hT
+  have h1 := refRawT_rel N (simWN N C hi hw htw) C.target
+    (fun hτ _ b _ h => ⟨h.1.hull_left b.b, fun hs hl =>
+      h.2 (CB.hull_isSome hs).1 (by rw [hτ] at hl ⊢; exact hl)⟩)
+    (fun hτ a _ _ h => ⟨h.1.hull_right a.b, fun hs hl =>
+      h.2 (CB.hull_isSome hs).2 (by rw [hτ] at hl ⊢; exact hl)⟩) T k c z0 z1 _ hT'
+  have h2 := SignT.Rel.map_leftP coarseM (R := RW C.target i)
+    (fun _ _ h => ⟨h.1.coarse, fun hs hl => h.2 (by simpa [coarseM, CB.coarse] using hs)
+      (by rwa [MB.m_coarseM] at hl)⟩) _ _ h1
+  have h3 := SignT.Rel.impP (R' := fun b p => RX b p.1)
+    (fun b => b.b.r.isSome && decide (MB.m C.target b < 2 ^ (i - 1))) (fun _ p hP h => by
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hP
+    change CB.Holds _ p.1.toC
+    rw [h.2 hP.1 hP.2]
+    exact h.1) _ _ hm h2
+  have h4 := signT_simN (simP1N N C { C with word := none }) C.target _ _
+    (GTree.Rel.map_self (fun x => (x, x)) (fun _ => rfl) S.toG) k.f k.F c z0 z1
+  exact SignT.Rel.monoP (fun _ _ ⟨_, hp, e⟩ => e ▸ hp) _ _ (SignT.Rel.compP _ _ _ h3 h4)
+
+/-- **The exact attempt on a tree `U`** lies in the balls of a vector on a ball tree holding `U`
+(when `fG - gF = q`). -/
+theorem refVecBT_exact (N : ℕ) (T : GTree MB N) (U : LTree N) (k : RawKey N)
+    (hT : ntruB k = true → T.Rel RE U.toG) (c z0 z1 : ZPoly N) (V : SignT MB N)
+    (hV : refVecBT N T k c z0 z1 = some V) :
+    V.Rel RE (opsE.sign .scaleFirst U.toG k.f k.F c z0 z1) := by
+  obtain ⟨rfl, -, hn⟩ := refVecBT_spec hV
+  exact SignT.Rel.map_leftP coarseM (fun _ _ h => CB.Holds.coarse h) _ _
+    (refRawT_rel N (simEN N) .scaleFirst (fun _ _ b _ h => CB.Holds.hull_left b.b h)
+      (fun h => absurd h (by decide)) T k c z0 z1 _ (hT hn))
 
 /-- **Reference vectors, every unbounded design point with `twOk C.x.rc`**: on a key passing
 `check C.x C.xn δq`, every intermediate of the attempt at `C` conditioned on `(z0, z1)` lies in
 its ball. -/
 theorem refVec_sound (C : Choices) (hw : C.word = none) (htw : twOk C.x.rc = true)
     (δq : ℕ → ℚ) (k : RawKey) (hk : check C.x C.xn δq k = true) (c z0 z1 : ZPoly)
-    (V : SignT MB) (hV : refVecB δq k c z0 z1 = some V) : V.Rel RX (traceX C k c z0 z1) := by
-  obtain ⟨rfl, -, -⟩ := refVecB_spec hV
-  exact SignT.Rel.map_left coarseM (fun _ _ h => CB.Holds.coarse h) _ _
-    (refRaw_rel (simX C hw htw) C.target (fun _ _ b _ h => CB.Holds.hull_left b.b h)
-      (fun _ a _ _ h => CB.Holds.hull_right a.b h) δq k c z0 z1 _ (treeX C δq k hk))
+    (V : SignT MB) (hV : refVecB δq k c z0 z1 = some V) : V.Rel RX (traceX C k c z0 z1) :=
+  refVecBT_sound 9 C hw htw (refTree δq k) _ (treeX C δq k hk) k c z0 z1 V hV
 
 /-- The admissible points `Adm C` (`Exec.SignRefine`). -/
 theorem refVec_adm (C : Choices) (hC : Adm C) (δq : ℕ → ℚ) (k : RawKey)
@@ -169,35 +283,13 @@ order `C.target` in the vector is below `2^(i-1)`, every intermediate lies in it
 theorem refVec_word (C : Choices) {i : ℕ} (hi : 1 ≤ i) (hw : C.word = some i)
     (htw : twOk C.x.rc = true) (δq : ℕ → ℚ) (k : RawKey) (hk : check C.x C.xn δq k = true)
     (c z0 z1 : ZPoly) (V : SignT MB) (hV : refVecB δq k c z0 z1 = some V)
-    (hm : V.magOkB C.target i = true) : V.Rel RX (traceX C k c z0 z1) := by
-  obtain ⟨rfl, -, -⟩ := refVecB_spec hV
-  have hT : (refTree δq k).Rel (RW C.target i) ((storeC C.x C.xn k).toG.map fun x => (x, x)) :=
-    GTree.Rel.map_right _ (fun _ _ h => ⟨h, fun _ _ => rfl⟩) _ _ (treeX C δq k hk)
-  have h1 := refRaw_rel (simW C hi hw htw) C.target
-    (fun hτ _ b _ h => ⟨h.1.hull_left b.b, fun hs hl =>
-      h.2 (CB.hull_isSome hs).1 (by rw [hτ] at hl ⊢; exact hl)⟩)
-    (fun hτ a _ _ h => ⟨h.1.hull_right a.b, fun hs hl =>
-      h.2 (CB.hull_isSome hs).2 (by rw [hτ] at hl ⊢; exact hl)⟩) δq k c z0 z1 _ hT
-  have h2 := SignT.Rel.map_left coarseM (R := RW C.target i)
-    (fun _ _ h => ⟨h.1.coarse, fun hs hl => h.2 (by simpa [coarseM, CB.coarse] using hs)
-      (by rwa [MB.m_coarseM] at hl)⟩) _ _ h1
-  have h3 := SignT.Rel.imp (R' := fun b p => RX b p.1)
-    (fun b => b.b.r.isSome && decide (MB.m C.target b < 2 ^ (i - 1))) (fun _ p hP h => by
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at hP
-    change CB.Holds _ p.1.toC
-    rw [h.2 hP.1 hP.2]
-    exact h.1) _ _ hm h2
-  have h4 := signT_sim (simP1 C { C with word := none }) C.target _ _
-    (GTree.Rel.map_self (fun x => (x, x)) (fun _ => rfl) (storeC C.x C.xn k).toG) k.f k.F c z0 z1
-  exact SignT.Rel.mono (fun _ _ ⟨_, hp, e⟩ => e ▸ hp) _ _ (SignT.Rel.comp _ _ _ h3 h4)
+    (hm : V.magOkB C.target i = true) : V.Rel RX (traceX C k c z0 z1) :=
+  refVecBT_word 9 C hi hw htw (refTree δq k) _ (treeX C δq k hk) k c z0 z1 V hV hm
 
 /-- **The exact attempt** lies in the same balls. -/
 theorem refVec_exact (δq : ℕ → ℚ) (hδ : ∀ L, 0 ≤ δq L) (k : RawKey) (c z0 z1 : ZPoly)
-    (V : SignT MB) (hV : refVecB δq k c z0 z1 = some V) : V.Rel RE (traceE k c z0 z1) := by
-  obtain ⟨rfl, -, hn⟩ := refVecB_spec hV
-  exact SignT.Rel.map_left coarseM (fun _ _ h => CB.Holds.coarse h) _ _
-    (refRaw_rel simE .scaleFirst (fun _ _ b _ h => CB.Holds.hull_left b.b h)
-      (fun h => absurd h (by decide)) δq k c z0 z1 _ (treeE δq hδ k hn))
+    (V : SignT MB) (hV : refVecB δq k c z0 z1 = some V) : V.Rel RE (traceE k c z0 z1) :=
+  refVecBT_exact 9 (refTree δq k) k.trueTree k (treeE δq hδ k) c z0 z1 V hV
 
 /-! ## The trace is the signer's computation -/
 
@@ -273,27 +365,63 @@ theorem opsX_fft (C : Choices) : ∀ (L : ℕ) (a : Fin (2 ^ L) → ℤ), (opsX 
     simp only [VOps.fft, fftW, opsX_fft C L]
     rfl
 
-/-- The target of `opsX C` is `targetX`. -/
-theorem opsX_target (C : Choices) (f F c : ZPoly) :
-    (opsX C).target C.target ((opsX C).fft 9 c) ((opsX C).fft 9 f) ((opsX C).fft 9 F) =
-      targetX C f F c := by
+/-- The target of `opsX C` is `targetX`, at every size. -/
+theorem opsX_targetP (C : Choices) {logn : ℕ} (f F c : ZPoly logn) :
+    (opsX C).target C.target ((opsX C).fft logn c) ((opsX C).fft logn f)
+      ((opsX C).fft logn F) = targetX C f F c := by
   rw [opsX_fft, opsX_fft, opsX_fft]
   obtain ⟨x, xn, τ, qi, w, rchk, salt, cap, beta2, infB, samp⟩ := C
   cases τ <;> rfl
 
+/-- The target of `opsX C` is `targetX`. -/
+theorem opsX_target (C : Choices) (f F c : ZPoly) :
+    (opsX C).target C.target ((opsX C).fft 9 c) ((opsX C).fft 9 f) ((opsX C).fft 9 F) =
+      targetX C f F c :=
+  opsX_targetP C f F c
+
+/-- The run of the conditioned attempt of `opsX C` on a stored tree `T`, at every size. -/
+theorem sign_run_opsX (C : Choices) {logn : ℕ} (T : CTree 64 logn) (k : RawKey logn)
+    (c z0 z1 : ZPoly logn) :
+    ((opsX C).sign C.target T.toG k.f k.F c z0 z1).run = (opsX C).run T.toG
+      (targetX C k.f k.F c).1 (targetX C k.f k.F c).2 z0 z1 := by
+  unfold VOps.sign
+  dsimp only
+  rw [opsX_targetP]
+
 theorem traceX_run (C : Choices) (k : RawKey) (c z0 z1 : ZPoly) :
     (traceX C k c z0 z1).run = (opsX C).run (storeC C.x C.xn k).toG
-      (targetX C k.f k.F c).1 (targetX C k.f k.F c).2 z0 z1 := by
-  unfold traceX VOps.sign
-  dsimp only
-  rw [opsX_target]
+      (targetX C k.f k.F c).1 (targetX C k.f k.F c).2 z0 z1 :=
+  sign_run_opsX C _ k c z0 z1
 
-theorem signX_eq_map (C : Choices) {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ)
-    (T : CTree 64 9) (k : RawKey) (c : ZPoly) (hc : ∀ i, |c i| < 12289) :
+/-- `signX_eq_map` at every size. -/
+theorem signX_eq_mapP (C : Choices) {m : Type → Type*} [Monad m] {logn : ℕ}
+    (samp : Fx 64 → Fx 64 → m ℤ) (T : CTree 64 logn) (k : RawKey logn) (c : ZPoly logn)
+    (hc : ∀ i, |c i| < 12289) :
     signX C samp T k c = (fun r => r.map fun s => (s.z0, s.z1)) <$>
       ffsX C samp T (targetX C k.f k.F c).1 (targetX C k.f k.F c).2 := by
   unfold signX
   exact ite_eq_left_of_eq_true _ _ (eq_true hc)
+
+theorem signX_eq_map (C : Choices) {m : Type → Type*} [Monad m] (samp : Fx 64 → Fx 64 → m ℤ)
+    (T : CTree 64 9) (k : RawKey) (c : ZPoly) (hc : ∀ i, |c i| < 12289) :
+    signX C samp T k c = (fun r => r.map fun s => (s.z0, s.z1)) <$>
+      ffsX C samp T (targetX C k.f k.F c).1 (targetX C k.f k.F c).2 :=
+  signX_eq_mapP C samp T k c hc
+
+/-- **The signer's SamplerZ queries on a stored tree `T`**, at every size: with a sampler
+answering by the tape of `(z0, z1)`, the attempt `signX` returns `(z0, z1)` and its queries are
+the leaf values of the conditioned attempt of `opsX C` on `T`. -/
+theorem signX_logP (C : Choices) (hr : C.rchk = none) {logn : ℕ} (T : CTree 64 logn)
+    (k : RawKey logn) (c z0 z1 : ZPoly logn) (hc : ∀ i, |c i| < 12289) (g : ℕ → ℤ)
+    (hg : ∀ i, i < (tapeOf logn z0 z1).length → g i = (tapeOf logn z0 z1).getD i 0) :
+    ((signX C (logS g) T k c).run (0, [])).run =
+      (some (z0, z1), ((tapeOf logn z0 z1).length,
+        ((opsX C).sign C.target T.toG k.f k.F c z0 z1).run.queries)) := by
+  have h : (ffsX C (logS g) T (targetX C k.f k.F c).1 (targetX C k.f k.F c).2).run (0, []) = _ :=
+    ffsX_log C hr _ _ _ z0 z1 g 0 [] fun i hi => by rw [zero_add]; exact hg i hi
+  rw [sign_run_opsX, signX_eq_mapP C _ _ k c hc, StateT.run_map, h]
+  change (Option.map (fun s : SampX logn => (s.z0, s.z1)) _, _) = _
+  exact Prod.ext rfl (Prod.ext (Nat.zero_add _) (List.nil_append _))
 
 /-- **The signer's SamplerZ queries**: with a sampler answering by the tape of `(z0, z1)`, the
 attempt `signX` returns `(z0, z1)` and its queries are the trace's leaf values. -/
@@ -301,13 +429,8 @@ theorem signX_log (C : Choices) (hr : C.rchk = none) (k : RawKey) (c z0 z1 : ZPo
     (hc : ∀ i, |c i| < 12289) (g : ℕ → ℤ)
     (hg : ∀ i, i < (tapeOf 9 z0 z1).length → g i = (tapeOf 9 z0 z1).getD i 0) :
     ((signX C (logS g) (storeC C.x C.xn k) k c).run (0, [])).run =
-      (some (z0, z1), ((tapeOf 9 z0 z1).length, (traceX C k c z0 z1).run.queries)) := by
-  have h : (ffsX C (logS g) (storeC C.x C.xn k) (targetX C k.f k.F c).1
-      (targetX C k.f k.F c).2).run (0, []) = _ :=
-    ffsX_log C hr _ _ _ z0 z1 g 0 [] fun i hi => by rw [zero_add]; exact hg i hi
-  rw [traceX_run, signX_eq_map C _ _ k c hc, StateT.run_map, h]
-  change (Option.map (fun s : SampX 9 => (s.z0, s.z1)) _, _) = _
-  exact Prod.ext rfl (Prod.ext (Nat.zero_add _) (List.nil_append _))
+      (some (z0, z1), ((tapeOf 9 z0 z1).length, (traceX C k c z0 z1).run.queries)) :=
+  signX_logP C hr _ k c z0 z1 hc g hg
 
 /-! ## Meaning of the exact values and of the slots -/
 

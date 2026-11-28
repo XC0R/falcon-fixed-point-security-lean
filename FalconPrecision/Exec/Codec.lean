@@ -163,6 +163,17 @@ kept at round-3 values here: header bytes, field widths, signature layout and pa
 def fndsaProv (trLen : ℕ) : EncChoices :=
   { round3 with order := .lsbFirst, pkForm := .ntt, trLen := trLen }
 
+/-- Round 3 (v1.2), Falcon-1024: Table 3.3 (`sbytelen = 1280`), headers `0x0A`, `0x5A`, `0x3A`
+(§3.11.3-3.11.5: `nnnn = 10`), `f`, `g` over 5 bits (§3.11.5). -/
+def round3_1024 : EncChoices :=
+  { round3 with
+    logn := 10, pkHdr := some 0x0A, skHdr := some 0x5A, fgBits := 5, sigHdr := some 0x3A,
+    sigPad := .fixed 1280 }
+
+/-- `fndsaProv` at Falcon-1024: the same provisional choices on `round3_1024`. -/
+def fndsaProv1024 (trLen : ℕ) : EncChoices :=
+  { round3_1024 with order := .lsbFirst, pkForm := .ntt, trLen := trLen }
+
 /-! ## Public keys -/
 
 /-- Encode `n` values `< q` (§3.11.4). -/
@@ -1376,7 +1387,9 @@ theorem data_cons {b : ByteArray} {n : ℕ} (hs : b.size = n + 1) :
 /-- **At round 3 the public-key decoder is `Round3.decodePk`**. -/
 theorem decodePk_round3 (b : ByteArray) :
     decodePk round3 b.data.toList = (Round3.decodePk b).map (·.toList) := by
-  rw [Round3.decodePk]
+  rw [Round3.decodePk, guard_bind_pos (show 1 ≤ 9 ∧ 9 ≤ 10 by decide)]
+  simp only [show (2 : ℕ) ^ 9 = 512 from rfl, show 1 + (14 * 512 + 7) / 8 = 897 from rfl,
+    show Nat.toUInt8 9 = 0x09 from rfl]
   by_cases hg : b.size = 897 ∧ b[0]! = 0x09
   · have hs : b.size = 897 := hg.1
     rw [guard_bind_pos hg]
@@ -1410,7 +1423,10 @@ theorem decodePk_round3 (b : ByteArray) :
 theorem decodeSk_round3 (b : ByteArray) :
     decodeSk round3 b.data.toList =
       (Round3.decodeSk b).map fun k => ⟨k.1.toList, k.2.1.toList, k.2.2.toList, []⟩ := by
-  rw [Round3.decodeSk]
+  rw [Round3.decodeSk, guard_bind_pos (show 1 ≤ 9 ∧ 9 ≤ 10 by decide)]
+  simp only [show Round3.fgBitsOf 9 = 6 from rfl, show (2 : ℕ) ^ 9 = 512 from rfl,
+    show 1 + (2 * 6 + 8) * 512 / 8 = 1281 from rfl,
+    show Nat.toUInt8 (0x50 + 9) = 0x59 from rfl, show 2 * 6 * 512 = 12 * 512 from rfl]
   by_cases hg : b.size = 1281 ∧ b[0]! = 0x59
   · have hs : b.size = 1281 := hg.1
     rw [guard_bind_pos hg]

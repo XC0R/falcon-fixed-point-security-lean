@@ -19,7 +19,8 @@ outputs by round-3 Alg. 10 (`s = (t - z)·B`), not proved. `katIn_spec`: what `k
 `falcon-precision-refvec/1`) with its scope (hypotheses, `checkFast` evaluated for this key at
 ties to even, `xn = 0` and `xn = 32`, what is not covered), each line prefixed by
 `@@VEC <file> `; `genVec` at `δ45q`. The printer is not proved; it prints the integers of the
-vector. -/
+vector. `zOfSigP`, `vecJsonN`, `scopeJsonN`: the same at every size, the text naming the KAT file
+and the theorems through `VecNames` (`names512`; Falcon-1024: `Exec.RefVec1024`). -/
 
 @[expose] public section
 
@@ -28,6 +29,29 @@ namespace FalconPrecision.Exec
 open FalconPrecision.Errors.FFTRec
 
 /-! ## The SamplerZ outputs of a signature -/
+
+/-- `zOfSig` at every size `2^logn`. -/
+def zOfSigP {logn : ℕ} (k : RawKey logn) (c s1 s2 : ZPoly logn) :
+    Option (ZPoly logn × ZPoly logn) :=
+  let a := Round3.polyOf (Array.ofFn fun i => c i - s1 i) logn
+  let z0 := Round3.polyOf (Array.ofFn fun i => -((ncoef a k.F i - ncoef s2 k.G i) / 12289)) logn
+  let z1 := Round3.polyOf (Array.ofFn fun i => -((ncoef s2 k.g i - ncoef a k.f i) / 12289)) logn
+  if (List.finRange (2 ^ logn)).all fun i =>
+      decide ((sOf k c z0 z1).1 i = s1 i ∧ (sOf k c z0 z1).2 i = s2 i) then some (z0, z1)
+  else none
+
+theorem zOfSigP_spec {logn : ℕ} {k : RawKey logn} {c s1 s2 z0 z1 : ZPoly logn}
+    (h : zOfSigP k c s1 s2 = some (z0, z1)) : sOf k c z0 z1 = (s1, s2) := by
+  revert h
+  simp only [zOfSigP]
+  split_ifs with hb
+  · intro h
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj h)
+    rw [List.all_eq_true] at hb
+    have hb' := fun i => of_decide_eq_true (hb i (List.mem_finRange i))
+    exact Prod.ext (funext fun i => (hb' i).1) (funext fun i => (hb' i).2)
+  · intro h
+    cases h
 
 /-- `(z0, z1)` with `s = (c, 0) - z·B`, `B = [[g, -f], [G, -F]]`:
 `z·[[g, f], [G, F]] = (c - s1, s2)`, `det = gF - fG = -q`; `none` unless
@@ -40,18 +64,11 @@ def zOfSig (k : RawKey) (c s1 s2 : ZPoly) : Option (ZPoly × ZPoly) :=
       decide ((sOf k c z0 z1).1 i = s1 i ∧ (sOf k c z0 z1).2 i = s2 i) then some (z0, z1)
   else none
 
+theorem zOfSig_eq (k : RawKey) (c s1 s2 : ZPoly) : zOfSig k c s1 s2 = zOfSigP k c s1 s2 := rfl
+
 theorem zOfSig_spec {k : RawKey} {c s1 s2 z0 z1 : ZPoly} (h : zOfSig k c s1 s2 = some (z0, z1)) :
-    sOf k c z0 z1 = (s1, s2) := by
-  revert h
-  simp only [zOfSig]
-  split_ifs with hb
-  · intro h
-    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj h)
-    rw [List.all_eq_true] at hb
-    have hb' := fun i => of_decide_eq_true (hb i (List.mem_finRange i))
-    exact Prod.ext (funext fun i => (hb' i).1) (funext fun i => (hb' i).2)
-  · intro h
-    cases h
+    sOf k c z0 z1 = (s1, s2) :=
+  zOfSigP_spec h
 
 /-- The inputs of the vector of a KAT entry: key, `c`, `s1`, `s2`, `z0`, `z1`. -/
 def katIn (e : Codec.KatEntry) : Option (RawKey × ZPoly × ZPoly × ZPoly × ZPoly × ZPoly) :=
@@ -125,6 +142,10 @@ def jV (L : ℕ) (v : Out L → MB) : String :=
 /-- An integer polynomial. -/
 def jZ (a : ZPoly) : String := jL ((List.finRange (2 ^ 9)).map fun i => toString (a i))
 
+/-- An integer polynomial of size `2^logn`. -/
+def jZP {logn : ℕ} (a : ZPoly logn) : String :=
+  jL ((List.finRange (2 ^ logn)).map fun i => toString (a i))
+
 /-- The nodes of a trace in run order, with the path of child choices (`1` = `T1`). -/
 def RunT.jNodes : {L : ℕ} → RunT MB L → String → List String
   | _, .leaf _ _ _ _ _, _ => []
@@ -155,71 +176,110 @@ def SignT.entries {V : Type} (A : SignT V) : List V :=
     let o := Out.ofIdx 9 j
     [A.ch o, A.fh o, A.Fh o, A.t0 o, A.t1 o]) ++ A.run.entries
 
+/-- Every entry of a trace of size `2^logn`. -/
+def SignT.entriesP {V : Type} {logn : ℕ} (A : SignT V logn) : List V :=
+  ((List.range (2 ^ logn)).flatMap fun j =>
+    let o := Out.ofIdx logn j
+    [A.ch o, A.fh o, A.Fh o, A.t0 o, A.t1 o]) ++ A.run.entries
+
 /-- The largest value of a list (`0` if empty). -/
 def maxQ (l : List ℚ) : ℚ := l.foldl max 0
 
-/-- The scope of a vector: conditioning, hypotheses at `δq` (named `dq`), the evaluated `check`
-values `chk` (point, value), control flag (no evaluated point passes), what is not covered. -/
-def scopeJson (dq : String) (chk : List (String × Bool)) : String :=
+/-- What the text of a vector names: the KAT file and its sha256, the suffix of the soundness
+theorems, the table condition, the check, the word condition, the stored tree and the solver of
+`z`. -/
+structure VecNames where
+  kat : String
+  sha : String
+  sfx : String
+  tw : String
+  chk : String
+  mag : String
+  tree : String
+  zs : String
+
+/-- The names of the Falcon-512 vectors. -/
+def names512 : VecNames :=
+  ⟨"falcon512-KAT.rsp", "dd75c946fdedef4ec46a2bee7e10c65c9126f1a839b9ced6921fd45f7354b5cd", "",
+    "twOk C.x.rc", "check", "magOkB", "storeC C.x C.xn k", "zOfSig"⟩
+
+/-- The scope of a vector named by `nm`: conditioning, hypotheses at `δq` (named `dq`), the
+evaluated check values `chk` (point, value), control flag (no evaluated point passes), what is
+not covered. -/
+def scopeJsonN (nm : VecNames) (dq : String) (chk : List (String × Bool)) : String :=
   let ctl := !(chk.any (·.2))
   jO [jF "conditioning" (jS ("SamplerZ replaced by the tape: call j answered by tape[j]; z is " ++
-      "the unique solution of s = (c,0) - zB (zOfSig, checked exactly)")),
-    jF "hypothesis" (jS ("refVec_sound: every point C with twOk C.x.rc and check C.x C.xn " ++
-      dq ++ " k = true at that point (rm, rc, dm, root, xn all enter check), unbounded words; " ++
-      "refVec_word: the same at (i+64)-bit words, 1 <= i, when magOkB C.target i; " ++
-      "refVec_exact: the exact values (fG - gF = q)")),
+      "the unique solution of s = (c,0) - zB (" ++ nm.zs ++ ", checked exactly)")),
+    jF "hypothesis" (jS ("refVec_sound" ++ nm.sfx ++ ": every point C with " ++ nm.tw ++ " and " ++
+      nm.chk ++ " C.x C.xn " ++ dq ++ " k = true at that point (rm, rc, dm, root, xn all enter " ++
+      nm.chk ++ "), unbounded words; " ++ "refVec_word" ++ nm.sfx ++
+      ": the same at (i+64)-bit words, 1 <= i, when " ++ nm.mag ++ " C.target i; " ++
+      "refVec_exact" ++ nm.sfx ++ ": the exact values (fG - gF = q)")),
     jF "check" (jO (chk.map fun x => jF x.1 (toString x.2))),
     jF "control" (toString ctl),
-    jF "controlNote" (jS (if ctl then "check fails at every evaluated point: refVec_sound " ++
-      "and refVec_word are not available for this key as stated; refVec_exact is"
-      else "check holds at the evaluated points marked true")),
+    jF "controlNote" (jS (if ctl then nm.chk ++ " fails at every evaluated point: refVec_sound" ++
+      nm.sfx ++ " and refVec_word" ++ nm.sfx ++ " are not available for this key as stated; " ++
+      "refVec_exact" ++ nm.sfx ++ " is"
+      else nm.chk ++ " holds at the evaluated points marked true")),
     jF "notCovered" (jS ("binary64 (floating-point) implementations; operation orders other " ++
       "than the Choices order (fftW, splitW, mergeW, updW, targetX; only the target has two " ++
       "orders), e.g. another association order or a half-spectrum FFT; key expansion on words " ++
-      "(the tree is the unbounded storeC C.x C.xn k, also in refVec_word); the printer is not " ++
-      "proved")),
+      "(the tree is the unbounded " ++ nm.tree ++ ", also in refVec_word" ++ nm.sfx ++ "); " ++
+      "the printer is not proved")),
     jF "reading" (jS ("necessary, not sufficient: a value outside its disc is not produced by " ++
       "any point satisfying the hypothesis; a value inside shows nothing more (one key, one " ++
       "message, one tape)"))]
 
-/-- The JSON form of a vector at `δq` (named `dq`, described by `desc`), with the evaluated
-`check` values `chk`. -/
-def vecJson (count : ℕ) (dq desc : String) (chk : List (String × Bool)) (k : RawKey)
-    (c s1 s2 z0 z1 : ZPoly) (V : SignT MB) : List String :=
-  let es := V.entries
+/-- The scope of a vector: conditioning, hypotheses at `δq` (named `dq`), the evaluated `check`
+values `chk` (point, value), control flag (no evaluated point passes), what is not covered. -/
+def scopeJson (dq : String) (chk : List (String × Bool)) : String := scopeJsonN names512 dq chk
+
+/-- The JSON form of a vector of size `2^logn` named by `nm`, at `δq` (named `dq`, described by
+`desc`), with the evaluated check values `chk`. -/
+def vecJsonN {logn : ℕ} (nm : VecNames) (count : ℕ) (dq desc : String)
+    (chk : List (String × Bool)) (k : RawKey logn) (c s1 s2 z0 z1 : ZPoly logn)
+    (V : SignT MB logn) : List String :=
+  let es := V.entriesP
   let rad := maxQ (es.map fun b => (b.b.r.getD 0))
-  let nrm := ((List.finRange (2 ^ 9)).map fun i => s1 i ^ 2 + s2 i ^ 2).sum
+  let nrm := ((List.finRange (2 ^ logn)).map fun i => s1 i ^ 2 + s2 i ^ 2).sum
   let leaves := V.run.jLeaves ""
   let calls := (List.range leaves.length).zip leaves
   ["{" ++ jF "format" (jS "falcon-precision-refvec/1") ++ ",",
-    jF "source" (jO [jF "kat" (jS "falcon512-KAT.rsp"), jF "sha256"
-      (jS "dd75c946fdedef4ec46a2bee7e10c65c9126f1a839b9ced6921fd45f7354b5cd"),
+    jF "source" (jO [jF "kat" (jS nm.kat), jF "sha256" (jS nm.sha),
       jF "count" (toString count)]) ++ ",",
     jF "params" (jO [jF "dq" (jS (dq ++ ": " ++ desc)),
       jF "refPoint" (jS "rm=rc=halfEven, dm=direct, root=plain, xn=32"),
       jF "ball" (jS "[re,im,r]: |x - (re + i*im)/2^64| <= r/2^96"),
       jF "slot" (jS "slot j of a level-L vector: value at exp(i*pi*k_j/2^L), k = slots[L][j]"),
       jF "tape" (jS "SamplerZ outputs in call order: node T1 then T0, leaf z0 then z1")]) ++ ",",
-    jF "scope" (scopeJson dq chk) ++ ",",
-    jF "f" (jZ k.f) ++ ",", jF "g" (jZ k.g) ++ ",", jF "F" (jZ k.F) ++ ",", jF "G" (jZ k.G) ++ ",",
-    jF "c" (jZ c) ++ ",", jF "s1" (jZ s1) ++ ",", jF "s2" (jZ s2) ++ ",",
-    jF "norm2" (toString nrm) ++ ",", jF "z0" (jZ z0) ++ ",", jF "z1" (jZ z1) ++ ",",
-    jF "tape" (jL ((tapeOf 9 z0 z1).map toString)) ++ ",",
+    jF "scope" (scopeJsonN nm dq chk) ++ ",",
+    jF "f" (jZP k.f) ++ ",", jF "g" (jZP k.g) ++ ",", jF "F" (jZP k.F) ++ ",",
+    jF "G" (jZP k.G) ++ ",", jF "c" (jZP c) ++ ",", jF "s1" (jZP s1) ++ ",",
+    jF "s2" (jZP s2) ++ ",", jF "norm2" (toString nrm) ++ ",", jF "z0" (jZP z0) ++ ",",
+    jF "z1" (jZP z1) ++ ",",
+    jF "tape" (jL ((tapeOf logn z0 z1).map toString)) ++ ",",
     jF "mag" (jO [jF "scaleFirst" (toString ⌈maxQ (es.map (·.mS))⌉),
       jF "multiplyFirst" (toString ⌈maxQ (es.map (·.mM))⌉),
-      jF "fits32_scaleFirst" (toString (V.magOkB .scaleFirst 32)),
-      jF "fits64_scaleFirst" (toString (V.magOkB .scaleFirst 64)),
-      jF "fits32_multiplyFirst" (toString (V.magOkB .multiplyFirst 32)),
-      jF "fits64_multiplyFirst" (toString (V.magOkB .multiplyFirst 64)),
+      jF "fits32_scaleFirst" (toString (V.magOkBP .scaleFirst 32)),
+      jF "fits64_scaleFirst" (toString (V.magOkBP .scaleFirst 64)),
+      jF "fits32_multiplyFirst" (toString (V.magOkBP .multiplyFirst 32)),
+      jF "fits64_multiplyFirst" (toString (V.magOkBP .multiplyFirst 64)),
       jF "maxRadius" (toString ⌈rad * 2 ^ 96⌉)]) ++ ",",
-    jF "slots" (jO ((List.range 10).map fun L =>
+    jF "slots" (jO ((List.range (logn + 1)).map fun L =>
       jF (toString L) (jL ((List.range (2 ^ L)).map fun j => toString (slotK L (Out.ofIdx L j))))))
       ++ ",",
-    jF "fft_c" (jV 9 V.ch) ++ ",", jF "fft_f" (jV 9 V.fh) ++ ",", jF "fft_F" (jV 9 V.Fh) ++ ",",
-    jF "t0" (jV 9 V.t0) ++ ",", jF "t1" (jV 9 V.t1) ++ ",", jS "nodes" ++ ":["] ++
+    jF "fft_c" (jV logn V.ch) ++ ",", jF "fft_f" (jV logn V.fh) ++ ",",
+    jF "fft_F" (jV logn V.Fh) ++ ",", jF "t0" (jV logn V.t0) ++ ",", jF "t1" (jV logn V.t1) ++ ",",
+    jS "nodes" ++ ":["] ++
   (V.run.jNodes "").intersperse "," ++ ["],", jS "leaves" ++ ":["] ++
   (calls.map fun x => jO (jF "call" (toString (2 * x.1)) :: x.2)).intersperse "," ++
   ["]}"]
+
+/-- The JSON form of a vector at `δq` (named `dq`, described by `desc`), with the evaluated
+`check` values `chk`. -/
+def vecJson (count : ℕ) (dq desc : String) (chk : List (String × Bool)) (k : RawKey)
+    (c s1 s2 z0 z1 : ZPoly) (V : SignT MB) : List String :=
+  vecJsonN names512 count dq desc chk k c s1 s2 z0 z1 V
 
 /-- The vector of a KAT entry at `δq` (named `dq`, described by `desc`), as lines
 `@@VEC e<count>.json <json line>`, followed by a summary line; `check` (as `checkFast`,

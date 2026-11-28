@@ -28,14 +28,15 @@ not assumed.
 
 The worlds. F is fixed-point signing with arithmetic `ρ`: SamplerZ at the computed centres `t̄`, and
 `⊥` when a range check of `ffs` on computed values fails (`‖·‖ ≤ 2²¹ - 1`). A signer is F when its
-operations form an `Arith`, follow `ffs`'s order of operations with the same result for the same
-output ulp and operands at every call site, return `⊥` exactly on these checks and overflow no other
-register. E is exact signing on the stored tree with the same aborts. For exact stored-tree signing
-X without aborts, `Pr_X[s] ≥ Pr_E[s] - Pr_E[abort]`, so `Pr_F[s] > T·2⁻¹²⁶` gives `Pr_X[s] > T·2⁻¹²⁸
-- Pr_E[abort]`; bounding `Pr_E[abort]` is a Lemma 12-type statement about exact signing, not proved.
-Neither world is the FIPS 206 draft signer, which signs in binary64 floating point; the draft as
-previewed by NIST does not specify fixed-point signing (paper §7, Type 2, tag 21) and asked for
-feedback on adding it.
+operations form an `Arith`, follow `sign1`'s order of operations (`c/q` at tag 0, the FFTs of `c/q`,
+`F`, `f` by the merge recursion at tags 9, 12, 8, the products at tag 21, then `ffs`) with the same
+result for the same output ulp and operands at every call site, return `⊥` exactly on these checks,
+overflow no other register and obtain the integers `z` exactly. E is exact signing on the stored
+tree with the same aborts. For exact stored-tree signing X without aborts,
+`Pr_X[s] ≥ Pr_E[s] - Pr_E[abort]`, so `Pr_F[s] > T·2⁻¹²⁶` gives `Pr_X[s] > T·2⁻¹²⁸ - Pr_E[abort]`;
+bounding `Pr_E[abort]` is a Lemma 12-type statement about exact signing, not proved. Neither world
+is the FIPS 206 draft signer, which signs in binary64 floating point; the draft as previewed by NIST
+does not specify fixed-point signing (paper §7, Type 2, tag 21) and asked for feedback on adding it.
 
 Keys. The keys are those of the paper's modified NTRUGen (Alg. 2), not Falcon round 3 or FIPS 206
 draft keys: the checks `γf,g = 255` (l. 7, §8.3), `γF,G = 3500` (l. 13, §8.4), `γhybrid = 4` (l. 8,
@@ -69,7 +70,8 @@ open OracleSpec OracleComp FalconPrecision.Errors.FFTRec FalconPrecision.Errors.
 namespace FalconPrecision.Errors.FFSamp
 
 /-- `c/q` (`q = 12289`). -/
-noncomputable def cdq (c : Fin (2 ^ 9) → ℤ) : Fin (2 ^ 9) → ℂ := fun i => ((c i : ℝ) / 12289 : ℝ)
+noncomputable def cdq {logn : ℕ} (c : Fin (2 ^ logn) → ℤ) : Fin (2 ^ logn) → ℂ :=
+  fun i => ((c i : ℝ) / 12289 : ℝ)
 
 /-- `c/q` at tag 0, retagged to tag 9 (real part; the imaginary part is `0` here). -/
 noncomputable def pre (ρ : Arith) (z : ℂ) : ℂ := ⟨ρ.retag (1 / 2 ^ 54) (ρ.quot z.re), z.im⟩
@@ -82,26 +84,41 @@ theorem pre_err (ρ : Arith) (z : ℂ) : ‖pre ρ z - z‖ ≤ 1 / 2 ^ 55 + 1 /
   rw [h, Complex.norm_real, Real.norm_eq_abs]
   linarith [abs_sub_le (ρ.retag (1 / 2 ^ 54) (ρ.quot z.re)) (ρ.quot z.re) z.re]
 
-/-- Exact `FFT(a)` at Falcon-512. -/
-noncomputable def fftE (a : Fin (2 ^ 9) → ℂ) (o : Out 9) : ℂ := evalAt a (pt 9 o)
+/-- Exact `FFT(a)` of size `2^logn` (evaluation at the roots `pt logn`). -/
+noncomputable def fftE {logn : ℕ} (a : Fin (2 ^ logn) → ℂ) (o : Out logn) : ℂ :=
+  evalAt a (pt logn o)
+
+/--
+A key of size `2^logn` for standard signing: `f, F`, the bounds `γf`, `γF` on their exact FFTs, and
+a stored tree (`FTreeP σlo hlo Λ`) after the expansion checks (not tied to `f, F`). -/
+structure KeyP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ) where
+  f : Fin (2 ^ logn) → ℤ
+  F : Fin (2 ^ logn) → ℤ
+  hf : ∀ o, ‖fftE (fun i => (f i : ℂ)) o‖ ≤ γf
+  hF : ∀ o, ‖fftE (fun i => (F i : ℂ)) o‖ ≤ γF
+  tree : FTreeP σlo hlo Λ logn
 
 /--
 A Falcon-512 key for standard signing from the paper's modified NTRUGen: `f, F`, the bounds `γf,g =
 255`, `γF,G = 3500` (Alg. 2 l. 7, 13) on their exact FFTs, and a stored tree after the expansion
 checks (not tied to `f, F`). -/
-structure Key where
-  f : Fin (2 ^ 9) → ℤ
-  F : Fin (2 ^ 9) → ℤ
-  hf : ∀ o, ‖fftE (fun i => (f i : ℂ)) o‖ ≤ 255
-  hF : ∀ o, ‖fftE (fun i => (F i : ℂ)) o‖ ≤ 3500
-  tree : FTree 9
+abbrev Key : Type := KeyP 9 255 3500 (1277833697 / 10 ^ 9) σmin512_ok lam512
+
+/-! The name of `Key`'s constructor before the size parameter (`Key.mk`), as an alias of
+`KeyP.mk`. -/
+
+namespace Key
+export KeyP (mk)
+end Key
 
 /-- `t̂0 = -FFT(c/q)⊙F̂`, exact. -/
-noncomputable def t0E (k : Key) (c : Fin (2 ^ 9) → ℤ) (o : Out 9) : ℂ :=
+noncomputable def t0E {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) (o : Out logn) : ℂ :=
   -(fftE (cdq c) o * fftE (fun i => (k.F i : ℂ)) o)
 
 /-- `t̂1 = FFT(c/q)⊙f̂`, exact. -/
-noncomputable def t1E (k : Key) (c : Fin (2 ^ 9) → ℤ) (o : Out 9) : ℂ :=
+noncomputable def t1E {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+    (k : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ) (o : Out logn) : ℂ :=
   fftE (cdq c) o * fftE (fun i => (k.f i : ℂ)) o
 
 /-- `FFT(c/q)` at tag 9. -/
@@ -169,6 +186,24 @@ theorem fft_cert512 (ρ : Arith) (u B r : ℝ) (hu : 0 < u) (hr : √2 * u ≤ r
     (fun L a o => ⟨_, (ρ.mul_err hu _ _).trans hr, rfl, rfl⟩) hE 9 a hB o
   rw [cert_closed _ _ _ E hE 9] at h
   simpa [E, fftE] using h
+
+/-- Parseval: `‖FFT(c/q)‖₂ ≤ 2^logn` for `|cᵢ| < q`. -/
+theorem fftE_l2P {logn : ℕ} (c : Fin (2 ^ logn) → ℤ) (hc : ∀ i, |c i| < 12289) :
+    l2 (fun o => fftE (cdq c) o) ≤ 2 ^ logn := by
+  have hp := parseval zeta pt pt_succ zeta_sq norm_zeta logn (cdq c)
+  have hs : ∑ i, ‖cdq c i‖ ^ 2 ≤ 2 ^ logn := by
+    calc ∑ i, ‖cdq c i‖ ^ 2 ≤ ∑ _i : Fin (2 ^ logn), (1 : ℝ) := Finset.sum_le_sum fun i _ => by
+          have : |(c i : ℝ)| < 12289 := by exact_mod_cast hc i
+          have h1 : ‖cdq c i‖ ≤ 1 := by
+            rw [cdq, Complex.norm_real, Real.norm_eq_abs, abs_div, div_le_one (by norm_num)]
+            norm_num; linarith
+          nlinarith [norm_nonneg (cdq c i)]
+      _ = 2 ^ logn := by rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin]; norm_num
+  unfold l2
+  rw [Real.sqrt_le_left (by positivity)]
+  change ∑ o, ‖evalAt (cdq c) (pt logn o)‖ ^ 2 ≤ _
+  rw [hp, sq]
+  exact mul_le_mul_of_nonneg_left hs (by positivity)
 
 theorem fftE_l2 (c : Fin (2 ^ 9) → ℤ)
     (hc : ∀ i, |c i| < 12289) : l2 (fun o => fftE (cdq c) o) ≤ 512 := by
@@ -267,33 +302,56 @@ theorem sign1_pathN (ρ : Arith) (k : Key) (c : Fin (2 ^ 9) → ℤ) :
   · exact .pure _ (by norm_num)
 
 /--
-`oa` makes at most `K` calls to `sg` (one ffSampling call of signing) along every execution; every
-other query is auxiliary. -/
-inductive UsesG (sg : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ))))
-        :
+`oa` makes at most `K` calls to `sg` (one ffSampling call of signing, keys of size `2^logn`) along
+every execution; every other query is auxiliary. -/
+inductive UsesGP (logn : ℕ) (γf γF σlo : ℝ) (hlo : 12778 / 10000 ≤ σlo) (Λ : ℕ → ℝ)
+    (sg : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+      OracleComp (FalconGame.spec aux Falcon.CallP)
+        (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)))) :
     ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop
-  | pure (K : ℕ) {α : Type} (x : α) : UsesG sg K (pure x)
+  | pure (K : ℕ) {α : Type} (x : α) : UsesGP logn γf γF σlo hlo Λ sg K (pure x)
   | query (K : ℕ) {α : Type} (t : ιA)
       (k : (FalconGame.spec aux Falcon.CallP).Range (.inl t) →
           OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ u, UsesG sg K (k u)) :
-      UsesG sg K
+      (h : ∀ u, UsesGP logn γf γF σlo hlo Λ sg K (k u)) :
+      UsesGP logn γf γF σlo hlo Λ sg K
           (liftM (OracleSpec.query (spec := FalconGame.spec aux Falcon.CallP) (.inl t)) >>= k)
-  | sign (K : ℕ) {α : Type} (key : Key) (c : Fin (2 ^ 9) → ℤ)
-      (k : Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)) →
+  | sign (K : ℕ) {α : Type} (key : KeyP logn γf γF σlo hlo Λ) (c : Fin (2 ^ logn) → ℤ)
+      (k : Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)) →
           OracleComp (FalconGame.spec aux Falcon.CallP) α)
-      (h : ∀ y, UsesG sg K (k y)) : UsesG sg (K + 1) (sg key c >>= k)
+      (h : ∀ y, UsesGP logn γf γF σlo hlo Λ sg K (k y)) :
+      UsesGP logn γf γF σlo hlo Λ sg (K + 1) (sg key c >>= k)
+
+/--
+`oa` makes at most `K` calls to `sg` (one ffSampling call of signing) along every execution; every
+other query is auxiliary (Falcon-512 keys). -/
+abbrev UsesG (sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP)
+      (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))) :
+    ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop :=
+  UsesGP 9 255 3500 (1277833697 / 10 ^ 9) σmin512_ok lam512 sg
+
+/-! The names of `UsesG`'s constructors before the size parameter, as aliases of the `UsesGP`
+constructors. -/
+
+namespace UsesG
+export UsesGP (pure query sign)
+end UsesG
 
 /-- `oa` calls `sign1` at most `K` times along every execution; every other query is auxiliary. -/
 def Uses (ρ : Arith) : ℕ → {α : Type} → OracleComp (FalconGame.spec aux Falcon.CallP) α → Prop :=
   UsesG (sign1 ρ)
 
-theorem UsesG.mono {sg : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
-        {K : ℕ}
-    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa) {K' : ℕ}
-    (hK : K ≤ K') : UsesG sg K' oa := by
+section UsesGP
+
+variable {logn : ℕ} {γf γF σlo : ℝ} {hlo : 12778 / 10000 ≤ σlo} {Λ : ℕ → ℝ}
+  {sg : KeyP logn γf γF σlo hlo Λ → (Fin (2 ^ logn) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP)
+      (Option ((Fin (2 ^ logn) → ℤ) × (Fin (2 ^ logn) → ℤ)))}
+
+theorem UsesGP.mono {K : ℕ} {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : UsesGP logn γf γF σlo hlo Λ sg K oa) {K' : ℕ} (hK : K ≤ K') :
+    UsesGP logn γf γF σlo hlo Λ sg K' oa := by
   induction h generalizing K' with
   | pure K x => exact .pure K' x
   | query K t k _ ih => exact .query K' t k fun u => ih u hK
@@ -302,13 +360,11 @@ theorem UsesG.mono {sg : Key → (Fin (2 ^ 9) → ℤ) →
     exact .sign K'' key c k fun y => ih y (by omega)
 
 /-- Calls add along `>>=`. -/
-theorem UsesG.bind {sg : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
-        {K K' : ℕ}
-    {α β : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
-    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β} (h : UsesG sg K oa)
-        (hb : ∀ x, UsesG sg K' (ob x)) :
-    UsesG sg (K + K') (oa >>= ob) := by
+theorem UsesGP.bind {K K' : ℕ} {α β : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β}
+    (h : UsesGP logn γf γF σlo hlo Λ sg K oa)
+    (hb : ∀ x, UsesGP logn γf γF σlo hlo Λ sg K' (ob x)) :
+    UsesGP logn γf γF σlo hlo Λ sg (K + K') (oa >>= ob) := by
   induction h with
   | pure K x => rw [pure_bind]; exact (hb x).mono (by omega)
   | query K t k _ ih => rw [bind_assoc]; exact .query _ t _ fun u => ih u hb
@@ -318,11 +374,9 @@ theorem UsesG.bind {sg : Key → (Fin (2 ^ 9) → ℤ) →
 
 /--
 **Path sums of an experiment**: per-call path sums `≤ S` of `sg` give `≤ K·S` for a weight `w` that
-is `0` on auxiliary queries. -/
-theorem UsesG.path {sg : Key → (Fin (2 ^ 9) → ℤ) →
-    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
-        {K : ℕ}
-    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa)
+is `0` on auxiliary queries (keys of any size). -/
+theorem UsesGP.path {K : ℕ} {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    (h : UsesGP logn γf γF σlo hlo Λ sg K oa)
     (w : ιA ⊕ Falcon.CallP → ℝ) (hw : ∀ t, w (.inl t) = 0) (S : ℝ) (hS : 0 ≤ S)
     (hs : ∀ key c, PathSum w (sg key c) S) : PathSum w oa (K * S) := by
   induction h with
@@ -334,6 +388,36 @@ theorem UsesG.path {sg : Key → (Fin (2 ^ 9) → ℤ) →
   | sign K key c k _ ih =>
     have := (hs key c).bind ih
     rwa [show S + K * S = ((K + 1 : ℕ) : ℝ) * S by push_cast; ring] at this
+
+end UsesGP
+
+theorem UsesG.mono {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K : ℕ}
+    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa) {K' : ℕ}
+    (hK : K ≤ K') : UsesG sg K' oa :=
+  UsesGP.mono h hK
+
+/-- Calls add along `>>=`. -/
+theorem UsesG.bind {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K K' : ℕ}
+    {α β : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}
+    {ob : α → OracleComp (FalconGame.spec aux Falcon.CallP) β} (h : UsesG sg K oa)
+        (hb : ∀ x, UsesG sg K' (ob x)) :
+    UsesG sg (K + K') (oa >>= ob) :=
+  UsesGP.bind h hb
+
+/--
+**Path sums of an experiment**: per-call path sums `≤ S` of `sg` give `≤ K·S` for a weight `w` that
+is `0` on auxiliary queries. -/
+theorem UsesG.path {sg : Key → (Fin (2 ^ 9) → ℤ) →
+    OracleComp (FalconGame.spec aux Falcon.CallP) (Option ((Fin (2 ^ 9) → ℤ) × (Fin (2 ^ 9) → ℤ)))}
+        {K : ℕ}
+    {α : Type} {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α} (h : UsesG sg K oa)
+    (w : ιA ⊕ Falcon.CallP → ℝ) (hw : ∀ t, w (.inl t) = 0) (S : ℝ) (hS : 0 ≤ S)
+    (hs : ∀ key c, PathSum w (sg key c) S) : PathSum w oa (K * S) :=
+  UsesGP.path h w hw S hS hs
 
 theorem Uses.mono {ρ : Arith} {K : ℕ} {α : Type}
     {oa : OracleComp (FalconGame.spec aux Falcon.CallP) α}

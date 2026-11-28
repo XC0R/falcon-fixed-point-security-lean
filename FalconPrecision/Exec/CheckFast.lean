@@ -125,9 +125,10 @@ def d11BA (L : ℕ) (g00 g10 g11 : Array (CB f)) : Array (CB f) :=
     (ofArr L g11 o).sub (CB.divR P.rm P.dm ((ofArr L g10 o).normSq P.rm) (ofArr L g00 o))
 
 /-- `ldlB` on arrays. -/
-def ldlBA : (L : ℕ) → (g00 g10 g11 : Array (CB f)) → BTree f L
-  | 0, g00, _, _ => .leaf (CB.leaf P.rm P.rc σ512q (ofArr 0 g00 ()))
-  | L + 1, g00, g10, g11 => ldlStepBA P f L g00 g10 (d11BA P f (L + 1) g00 g10 g11) (ldlBA L)
+def ldlBA : (L : ℕ) → (g00 g10 g11 : Array (CB f)) → optParam ℚ σ512q → BTree f L
+  | 0, g00, _, _, σq => .leaf (CB.leaf P.rm P.rc σq (ofArr 0 g00 ()))
+  | L + 1, g00, g10, g11, σq =>
+    ldlStepBA P f L g00 g10 (d11BA P f (L + 1) g00 g10 g11) fun a b c => ldlBA L a b c σq
 
 theorem ldlStepBA_eq (L : ℕ) (g00 g10 d11 : Array (CB f))
     (rec : Array (CB f) → Array (CB f) → Array (CB f) → BTree f L)
@@ -137,56 +138,73 @@ theorem ldlStepBA_eq (L : ℕ) (g00 g10 d11 : Array (CB f))
       ldlStepB P f L (ofArr (L + 1) g00) (ofArr (L + 1) g10) (ofArr (L + 1) d11) rec' := by
   simp only [ldlStepBA, ldlStepB, splitBA, splitB, h, ofArr_toArr, ofArr_twsBA, memo_eq]
 
-theorem ldlBA_eq : ∀ (L : ℕ) (g00 g10 g11 : Array (CB f)),
-    ldlBA P f L g00 g10 g11 = ldlB P f L (ofArr L g00) (ofArr L g10) (ofArr L g11)
+/-- `ldlBA_eq` at every leaf constant `σq`. -/
+theorem ldlBA_eqP (σq : ℚ) : ∀ (L : ℕ) (g00 g10 g11 : Array (CB f)),
+    ldlBA P f L g00 g10 g11 σq = ldlB P f L (ofArr L g00) (ofArr L g10) (ofArr L g11) σq
   | 0, _, _, _ => rfl
   | L + 1, g00, g10, g11 => by
-    rw [ldlBA, ldlB, ldlStepBA_eq P f L _ _ _ _ _ (ldlBA_eq L)]
+    rw [ldlBA, ldlB,
+      ldlStepBA_eq P f L _ _ _ _ (fun a b c => ldlB P f L a b c σq) (ldlBA_eqP σq L)]
     simp only [d11BA, d11B, ofArr_toArr, memo_eq]
 
-/-- `gramB` on arrays. -/
-def gramBA (k : RawKey) : Array (CB f) × Array (CB f) × Array (CB f) :=
-  let fb := fftBA P f 9 k.f
-  let gb := fftBA P f 9 k.g
-  let Fb := fftBA P f 9 k.F
-  let Gb := fftBA P f 9 k.G
-  (toArr 9 fun o => ((ofArr 9 gb o).normSq P.rm).add ((ofArr 9 fb o).normSq P.rm),
-    toArr 9 fun o => (CB.mul P.rm (ofArr 9 Gb o) (ofArr 9 gb o).conjg).add
-      (CB.mul P.rm (ofArr 9 Fb o) (ofArr 9 fb o).conjg),
-    toArr 9 fun o => ((ofArr 9 Gb o).normSq P.rm).add ((ofArr 9 Fb o).normSq P.rm))
+theorem ldlBA_eq : ∀ (L : ℕ) (g00 g10 g11 : Array (CB f)),
+    ldlBA P f L g00 g10 g11 = ldlB P f L (ofArr L g00) (ofArr L g10) (ofArr L g11) :=
+  ldlBA_eqP P f σ512q
 
-/-- `rootB` on arrays. -/
-def rootBA (gr : Array (CB f) × Array (CB f) × Array (CB f)) : Array (CB f) :=
+/-- `gramB` on arrays. -/
+def gramBA {logn : ℕ} (k : RawKey logn) : Array (CB f) × Array (CB f) × Array (CB f) :=
+  let fb := fftBA P f logn k.f
+  let gb := fftBA P f logn k.g
+  let Fb := fftBA P f logn k.F
+  let Gb := fftBA P f logn k.G
+  (toArr logn fun o => ((ofArr logn gb o).normSq P.rm).add ((ofArr logn fb o).normSq P.rm),
+    toArr logn fun o => (CB.mul P.rm (ofArr logn Gb o) (ofArr logn gb o).conjg).add
+      (CB.mul P.rm (ofArr logn Fb o) (ofArr logn fb o).conjg),
+    toArr logn fun o => ((ofArr logn Gb o).normSq P.rm).add ((ofArr logn Fb o).normSq P.rm))
+
+/-- `rootB` on arrays (at size `2^logn`). -/
+def rootBA (gr : Array (CB f) × Array (CB f) × Array (CB f)) (logn : ℕ := 9) : Array (CB f) :=
   match P.root with
-  | .plain => d11BA P f 9 gr.1 gr.2.1 gr.2.2
-  | .ntru => toArr 9 fun o => CB.divR P.rm P.dm (CB.ofInt (12289 ^ 2)) (ofArr 9 gr.1 o)
+  | .plain => d11BA P f logn gr.1 gr.2.1 gr.2.2
+  | .ntru => toArr logn fun o => CB.divR P.rm P.dm (CB.ofInt (12289 ^ 2)) (ofArr logn gr.1 o)
 
 /-- `expandB` on arrays. -/
-def expandBA (k : RawKey) : BTree f 9 :=
+def expandBA {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : BTree f (L + 1) :=
   let gr := gramBA P f k
-  ldlStepBA P f 8 gr.1 gr.2.1 (rootBA P f gr) (ldlBA P f 8)
+  ldlStepBA P f L gr.1 gr.2.1 (rootBA P f gr (L + 1)) fun a b c => ldlBA P f L a b c σq
 
-theorem expandBA_eq (k : RawKey) : expandBA P f k = expandB P f k := by
-  rw [expandBA, expandB, ldlStepBA_eq P f 8 _ _ _ _ _ (ldlBA_eq P f 8)]
+/-- `expandBA_eq` at every size `2^(L+1)` and leaf constant `σq`. -/
+theorem expandBA_eqP {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ) :
+    expandBA P f k σq = expandB P f k σq := by
+  rw [expandBA, expandB,
+    ldlStepBA_eq P f L _ _ _ _ (fun a b c => ldlB P f L a b c σq) (ldlBA_eqP P f σq L)]
   obtain ⟨rm, rc, dm, root⟩ := P
   cases root <;>
   simp only [rootBA, rootB, gramBA, gramB, d11BA, d11B, ofArr_toArr, ofArr_fftBA, memo_eq]
+
+theorem expandBA_eq (k : RawKey) : expandBA P f k = expandB P f k := expandBA_eqP P f k σ512q
 
 /-! ## The per-key check -/
 
 variable (n : ℕ)
 
 /-- `check` on the array versions. -/
-def checkFast (δq : ℕ → ℚ) (k : RawKey) : Bool :=
-  let T := (expandBA P (64 + n) k).lower P.rm n
+def checkFast {L : ℕ} (δq : ℕ → ℚ) (k : RawKey (L + 1)) (fB : ℚ := 255) (FB : ℚ := 3500)
+    (σlo : ℚ := 1277833697 / 10 ^ 9) (Λq : ℕ → ℚ := lam512q) (σq : ℚ := σ512q) : Bool :=
+  let T := (expandBA P (64 + n) k σq).lower P.rm n
   let C := T.centre
-  let fb := fftBA P (64 + n) 9 k.f
-  let Fb := fftBA P (64 + n) 9 k.F
-  allOut 9 (fun o => (ofArr 9 fb o).normLeB 255) &&
-    allOut 9 (fun o => (ofArr 9 Fb o).normLeB 3500) && C.okB && C.realB &&
+  let fb := fftBA P (64 + n) (L + 1) k.f
+  let Fb := fftBA P (64 + n) (L + 1) k.F
+  allOut (L + 1) (fun o => (ofArr (L + 1) fb o).normLeB fB) &&
+    allOut (L + 1) (fun o => (ofArr (L + 1) Fb o).normLeB FB) && C.okB σlo Λq && C.realB &&
     T.radOkB δq && ntruB k
 
-theorem checkFast_eq (δq : ℕ → ℚ) (k : RawKey) : checkFast P n δq k = check P n δq k := by
-  simp only [checkFast, check, storeB, expandBA_eq, ofArr_fftBA]
+/-- `checkFast_eq` at every size `2^(L+1)` and every threshold. -/
+theorem checkFast_eqP (δq : ℕ → ℚ) {L : ℕ} (k : RawKey (L + 1)) (fB FB σlo : ℚ) (Λq : ℕ → ℚ)
+    (σq : ℚ) : checkFast P n δq k fB FB σlo Λq σq = check P n δq k fB FB σlo Λq σq := by
+  simp only [checkFast, check, storeB, expandBA_eqP, ofArr_fftBA]
+
+theorem checkFast_eq (δq : ℕ → ℚ) (k : RawKey) : checkFast P n δq k = check P n δq k :=
+  checkFast_eqP P n δq k _ _ _ _ _
 
 end FalconPrecision.Exec

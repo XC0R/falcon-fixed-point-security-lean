@@ -18,13 +18,15 @@ public import VCVio.Algorithms.KeccakPrefix
   of VCVio's c-fn-dsa port (`Extern/Falcon/Sampling.lean`, text) `r ‖ tr ‖ 0x00 ‖ |ctx| ‖ ctx ‖ m`
   with `tr = SHAKE-256(pk)` over `trLen` bytes; prehash `r ‖ tr ‖ 0x01 ‖ |ctx| ‖ ctx ‖ oid ‖ m`;
   `|ctx| > 255` is rejected (`none`; one length byte, as FIPS 204), so verification fails.
-* `verifyCore`: Alg. 16 l. 5-9 (p. 45) at `n = 512`: `s₁ = c - s₂h mod q` centred, accept iff
+* `verifyCore`: Alg. 16 l. 5-9 (p. 45) at `n = 2^logn` (default `n = 512`; `verifySig`, `openSm`:
+  `logn = V.enc.logn`): `s₁ = c - s₂h mod q` centred, accept iff
   `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and, if `infB = some B` (the slides' infinity-norm bound, value
   unpinned), `|s₁ᵢ|, |s₂ᵢ| ≤ B`.
 * `verifySig` (detached signatures, §3.11.3) and `openSm` (NIST API, §3.11.6).
 
-VCVio's `shake256` is trusted as tested in VCVio and here against Python `hashlib` (100 KAT
-fingerprints, full values for entries 0 and 70); it is not proved equal to FIPS 202. -/
+VCVio's `shake256` is trusted as tested in VCVio and here against Python `hashlib` (the 100
+fingerprints of each round-3 KAT file, Falcon-512 and Falcon-1024, full values for entries 0 and 70
+of each); it is not proved equal to FIPS 202. -/
 
 @[expose] public section
 
@@ -100,52 +102,68 @@ def round3V : VerChoices := ⟨round3, false, .raw, 34034726, none⟩
 def fndsaProvV (trLen infB : ℕ) : VerChoices :=
   ⟨fndsaProv trLen, true, .pure [], 34034726, some infB⟩
 
+/-- Round 3, Falcon-1024: `⌊β²⌋ = 70265242` (Table 3.3, p. 51), no BUFF, raw messages. -/
+def round3V1024 : VerChoices := ⟨round3_1024, false, .raw, 70265242, none⟩
+
+/-- `fndsaProvV` at Falcon-1024: `⌊β²⌋` kept at the round-3 value `70265242`, context empty
+(placeholders). -/
+def fndsaProvV1024 (trLen infB : ℕ) : VerChoices :=
+  ⟨fndsaProv1024 trLen, true, .pure [], 70265242, some infB⟩
+
 /-- The hashed string `r ‖ (tr) ‖ msgRep`; `none` if `msgRep` is. -/
 def hashInput (V : VerChoices) (pk salt msg : List UInt8) : Option (List UInt8) :=
   (msgRep V.mode msg).map fun m =>
     salt ++ (if V.buff then (shake256 (toBA pk) V.enc.trLen).data.toList else []) ++ m
 
-/-! ## Verification (`n = 512`) -/
+/-! ## Verification (`n = 2^logn`) -/
 
 /-- `s₁ = c - s₂h mod q`, centred in `[-⌊q/2⌋, ⌊q/2⌋]` (Alg. 16 l. 5). -/
-def s1Of (c : List ℕ) (s2 h : List ℤ) : Fin (2 ^ 9) → ℤ := fun i =>
-  centre (modq ((c.getD i 0 : ℤ) - ncoef (polyOf s2.toArray) (polyOf h.toArray) i))
+def s1Of (c : List ℕ) (s2 h : List ℤ) (logn : ℕ := 9) : Fin (2 ^ logn) → ℤ := fun i =>
+  centre (modq ((c.getD i 0 : ℤ) - ncoef (polyOf s2.toArray logn) (polyOf h.toArray logn) i))
 
 /-- The squared norm. -/
-def normSq (a : Fin (2 ^ 9) → ℤ) : ℤ := ∑ i, a i ^ 2
+def normSq {logn : ℕ} (a : Fin (2 ^ logn) → ℤ) : ℤ := ∑ i, a i ^ 2
 
 /-- The infinity-norm check (none: no check). -/
-def infOk (B : Option ℕ) (a : Fin (2 ^ 9) → ℤ) : Bool := B.all fun B => decide (∀ i, |a i| ≤ B)
+def infOk {logn : ℕ} (B : Option ℕ) (a : Fin (2 ^ logn) → ℤ) : Bool :=
+  B.all fun B => decide (∀ i, |a i| ≤ B)
 
 /-- The coefficients of `h` from the stored public key. -/
 def hPoly (C : EncChoices) (hv : List ℕ) : List ℕ :=
   match C.pkForm with
   | .coeff => hv
-  | .ntt => (inttq hv.toArray).toList
+  | .ntt => (inttq hv.toArray C.logn).toList
 
-/-- Alg. 16 l. 5-9: accept iff `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and the infinity-norm check. -/
-def verifyCore (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) : Bool :=
-  let s1 := s1Of c s2 (h.map Int.ofNat)
-  decide (normSq s1 + normSq (polyOf s2.toArray) ≤ V.beta2) && infOk V.infB s1 &&
-    infOk V.infB (polyOf s2.toArray)
+/-- Alg. 16 l. 5-9 at degree `2^logn`: accept iff `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and the infinity-norm
+check. -/
+def verifyCore (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) (logn : ℕ := 9) : Bool :=
+  let s1 := s1Of c s2 (h.map Int.ofNat) logn
+  decide (normSq s1 + normSq (polyOf s2.toArray logn) ≤ V.beta2) && infOk V.infB s1 &&
+    infOk V.infB (polyOf s2.toArray logn)
 
-/-- Alg. 16 on a detached signature (§3.11.3), for `V.enc.logn = 9`; rejects if `hashInput` is
-`none`. -/
+/-- `verifyCore` on inputs of exactly `2^logn` coefficients: `h`, `c` and `s₂` of any other length
+are rejected (`verifyCore` reads missing coefficients as `0` and ignores extra ones). -/
+def verifyCoreChecked (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) (logn : ℕ := 9) : Bool :=
+  (h.length == 2 ^ logn && c.length == 2 ^ logn && s2.length == 2 ^ logn) &&
+    verifyCore V h c s2 logn
+
+/-- Alg. 16 on a detached signature (§3.11.3), at degree `2^V.enc.logn`; rejects if `hashInput`
+is `none`. -/
 def verifySig (V : VerChoices) (pk msg sig : List UInt8) : Bool :=
   match decodePk V.enc pk, decodeSig V.enc sig with
   | some hv, some σ =>
     match (hashInput V pk σ.salt msg).bind (hashToPoint V.enc.n) with
-    | some c => verifyCore V (hPoly V.enc hv) c σ.s2
+    | some c => verifyCore V (hPoly V.enc hv) c σ.s2 V.enc.logn
     | none => false
   | _, _ => false
 
-/-- Alg. 16 on a NIST-API signed message (§3.11.6), for `V.enc.logn = 9`: the message if
+/-- Alg. 16 on a NIST-API signed message (§3.11.6), at degree `2^V.enc.logn`: the message if
 accepted. -/
 def openSm (V : VerChoices) (pk sm : List UInt8) : Option (List UInt8) := do
   let hv ← decodePk V.enc pk
   let (salt, msg, s2) ← decodeSm V.enc sm
   let c ← (hashInput V pk salt msg).bind (hashToPoint V.enc.n)
-  guard (verifyCore V (hPoly V.enc hv) c s2)
+  guard (verifyCore V (hPoly V.enc hv) c s2 V.enc.logn)
   pure msg
 
 /-! ## Statements -/
@@ -206,19 +224,18 @@ theorem centre_spec (d s : ℤ) :
   rcases abs_cases s with ⟨ha, hs⟩ | ⟨ha, hs⟩ <;> rw [ha] <;> split_ifs <;> constructor <;>
     intro h <;> omega
 
-/-- **The verifier's equation is the spec's** (Alg. 16 l. 5-9, p. 45): accept iff some `s₁` with
-`s₁ ≡ c - s₂h (mod q)` in `ℤ[x]/(x⁵¹² + 1)`, `|s₁ᵢ| ≤ ⌊q/2⌋`, has `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and
-passes the infinity-norm check. -/
-theorem verifyCore_iff (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) :
-    verifyCore V h c s2 = true ↔ ∃ s1 : Fin (2 ^ 9) → ℤ,
-      (∀ i : Fin (2 ^ 9), ((c.getD i 0 : ℤ) -
-          ncoef (polyOf s2.toArray) (polyOf (h.map Int.ofNat).toArray) i - s1 i) % (qN : ℤ) = 0 ∧
-        2 * |s1 i| < qN) ∧
-      normSq s1 + normSq (polyOf s2.toArray) ≤ V.beta2 ∧ infOk V.infB s1 = true ∧
-      infOk V.infB (polyOf s2.toArray) = true := by
-  have key : ∀ s1 : Fin (2 ^ 9) → ℤ, (∀ i : Fin (2 ^ 9), ((c.getD i 0 : ℤ) -
-      ncoef (polyOf s2.toArray) (polyOf (h.map Int.ofNat).toArray) i - s1 i) % (qN : ℤ) = 0 ∧
-      2 * |s1 i| < qN) ↔ s1 = s1Of c s2 (h.map Int.ofNat) := fun s1 =>
+/-- **The verifier's equation is the spec's at degree `2^logn`** (Alg. 16 l. 5-9, p. 45): accept
+iff some `s₁` with `s₁ ≡ c - s₂h (mod q)` in `ℤ[x]/(x^(2^logn) + 1)`, `|s₁ᵢ| ≤ ⌊q/2⌋`, has
+`‖(s₁, s₂)‖² ≤ ⌊β²⌋` and passes the infinity-norm check. -/
+theorem verifyCore_iffP (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) (logn : ℕ) :
+    verifyCore V h c s2 logn = true ↔ ∃ s1 : Fin (2 ^ logn) → ℤ,
+      (∀ i : Fin (2 ^ logn), ((c.getD i 0 : ℤ) - ncoef (polyOf s2.toArray logn)
+          (polyOf (h.map Int.ofNat).toArray logn) i - s1 i) % (qN : ℤ) = 0 ∧ 2 * |s1 i| < qN) ∧
+      normSq s1 + normSq (polyOf s2.toArray logn) ≤ V.beta2 ∧ infOk V.infB s1 = true ∧
+      infOk V.infB (polyOf s2.toArray logn) = true := by
+  have key : ∀ s1 : Fin (2 ^ logn) → ℤ, (∀ i : Fin (2 ^ logn), ((c.getD i 0 : ℤ) -
+      ncoef (polyOf s2.toArray logn) (polyOf (h.map Int.ofNat).toArray logn) i - s1 i) %
+        (qN : ℤ) = 0 ∧ 2 * |s1 i| < qN) ↔ s1 = s1Of c s2 (h.map Int.ofNat) logn := fun s1 =>
     (forall_congr' fun i => centre_spec _ _).trans funext_iff.symm
   constructor
   · intro hv
@@ -228,5 +245,43 @@ theorem verifyCore_iff (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) :
     rw [(key s1).mp hs] at hn h1
     simp only [verifyCore, Bool.and_eq_true, decide_eq_true_eq]
     exact ⟨⟨hn, h1⟩, h2⟩
+
+/-- **The verifier's equation is the spec's** (Alg. 16 l. 5-9, p. 45): accept iff some `s₁` with
+`s₁ ≡ c - s₂h (mod q)` in `ℤ[x]/(x⁵¹² + 1)`, `|s₁ᵢ| ≤ ⌊q/2⌋`, has `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and
+passes the infinity-norm check. -/
+theorem verifyCore_iff (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) :
+    verifyCore V h c s2 = true ↔ ∃ s1 : Fin (2 ^ 9) → ℤ,
+      (∀ i : Fin (2 ^ 9), ((c.getD i 0 : ℤ) -
+          ncoef (polyOf s2.toArray) (polyOf (h.map Int.ofNat).toArray) i - s1 i) % (qN : ℤ) = 0 ∧
+        2 * |s1 i| < qN) ∧
+      normSq s1 + normSq (polyOf s2.toArray) ≤ V.beta2 ∧ infOk V.infB s1 = true ∧
+      infOk V.infB (polyOf s2.toArray) = true :=
+  verifyCore_iffP V h c s2 9
+
+/-- **The checked verifier**: it accepts iff `h`, `c` and `s₂` have exactly `2^logn` coefficients
+and `verifyCore` accepts. -/
+theorem verifyCoreChecked_iff (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) (logn : ℕ) :
+    verifyCoreChecked V h c s2 logn = true ↔ h.length = 2 ^ logn ∧ c.length = 2 ^ logn ∧
+      s2.length = 2 ^ logn ∧ verifyCore V h c s2 logn = true := by
+  simp only [verifyCoreChecked, Bool.and_eq_true, beq_iff_eq, and_assoc]
+
+/-- On inputs of exactly `2^logn` coefficients the checked verifier is `verifyCore`. -/
+theorem verifyCoreChecked_eq (V : VerChoices) {h c : List ℕ} {s2 : List ℤ} {logn : ℕ}
+    (hh : h.length = 2 ^ logn) (hc : c.length = 2 ^ logn) (hs : s2.length = 2 ^ logn) :
+    verifyCoreChecked V h c s2 logn = verifyCore V h c s2 logn := by
+  simp only [verifyCoreChecked, hh, hc, hs, beq_self_eq_true, Bool.and_self, Bool.true_and]
+
+/-- **The checked verifier's equation is the spec's** (Alg. 16 l. 5-9, p. 45): it accepts iff
+`h`, `c`, `s₂` have exactly `2^logn` coefficients and some `s₁ ≡ c - s₂h (mod q)` in
+`ℤ[x]/(x^(2^logn) + 1)`, `|s₁ᵢ| ≤ ⌊q/2⌋`, has `‖(s₁, s₂)‖² ≤ ⌊β²⌋` and passes the infinity-norm
+check. -/
+theorem verifyCoreChecked_spec (V : VerChoices) (h c : List ℕ) (s2 : List ℤ) (logn : ℕ) :
+    verifyCoreChecked V h c s2 logn = true ↔ h.length = 2 ^ logn ∧ c.length = 2 ^ logn ∧
+      s2.length = 2 ^ logn ∧ ∃ s1 : Fin (2 ^ logn) → ℤ,
+      (∀ i : Fin (2 ^ logn), ((c.getD i 0 : ℤ) - ncoef (polyOf s2.toArray logn)
+          (polyOf (h.map Int.ofNat).toArray logn) i - s1 i) % (qN : ℤ) = 0 ∧ 2 * |s1 i| < qN) ∧
+      normSq s1 + normSq (polyOf s2.toArray logn) ≤ V.beta2 ∧ infOk V.infB s1 = true ∧
+      infOk V.infB (polyOf s2.toArray logn) = true := by
+  rw [verifyCoreChecked_iff, verifyCore_iffP]
 
 end FalconPrecision.Exec.Codec

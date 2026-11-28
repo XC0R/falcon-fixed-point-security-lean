@@ -50,12 +50,12 @@ structure XChoices where
   root : RootMode
   deriving DecidableEq, Repr
 
-/-- A raw Falcon-512 private basis `[[g, -f], [G, -F]]`. -/
-structure RawKey where
-  f : Fin (2 ^ 9) → ℤ
-  g : Fin (2 ^ 9) → ℤ
-  F : Fin (2 ^ 9) → ℤ
-  G : Fin (2 ^ 9) → ℤ
+/-- A raw private basis `[[g, -f], [G, -F]]` of size `2^logn` (Falcon-512: `logn = 9`). -/
+structure RawKey (logn : ℕ := 9) where
+  f : Fin (2 ^ logn) → ℤ
+  g : Fin (2 ^ logn) → ℤ
+  F : Fin (2 ^ logn) → ℤ
+  G : Fin (2 ^ logn) → ℤ
 
 /-- Falcon-512's `σ = 165.736617183` (spec Table 3.3). -/
 def σ512q : ℚ := 165736617183 / 10 ^ 9
@@ -116,28 +116,30 @@ def ldlStepC (L : ℕ) (g00 g10 d11 : Out (L + 1) → Cx f)
 def d11C (L : ℕ) (g00 g10 g11 : Out L → Cx f) : Out L → Cx f :=
   memo L fun o => (g11 o).sub (((g10 o).normSqR P.rm).divR P.rm P.dm (g00 o).re)
 
-/-- ffLDL⋆ with leaves `σ/√D`. -/
-def ldlC : (L : ℕ) → (g00 g10 g11 : Out L → Cx f) → CTree f L
-  | 0, g00, _, _ => .leaf (Cx.leafR P.rm P.rc σ512q (g00 ()).re).re
-  | L + 1, g00, g10, g11 => ldlStepC P f L g00 g10 (d11C P f (L + 1) g00 g10 g11) (ldlC L)
+/-- ffLDL⋆ with leaves `σq/√D` (Falcon-512: `σq = σ512q`). -/
+def ldlC : (L : ℕ) → (g00 g10 g11 : Out L → Cx f) → optParam ℚ σ512q → CTree f L
+  | 0, g00, _, _, σq => .leaf (Cx.leafR P.rm P.rc σq (g00 ()).re).re
+  | L + 1, g00, g10, g11, σq =>
+    ldlStepC P f L g00 g10 (d11C P f (L + 1) g00 g10 g11) fun a b c => ldlC L a b c σq
 
 /-- The Gram matrix `(g00, g10, g11)` of `B·B⋆` from the FFTs of `f, g, F, G`. -/
-def gramC (k : RawKey) : (Out 9 → Cx f) × (Out 9 → Cx f) × (Out 9 → Cx f) :=
-  let fb := fftC P f 9 k.f
-  let gb := fftC P f 9 k.g
-  let Fb := fftC P f 9 k.F
-  let Gb := fftC P f 9 k.G
-  (memo 9 fun o => ((gb o).normSqR P.rm).add ((fb o).normSqR P.rm),
-    memo 9 fun o => ((Gb o).mul P.rm (gb o).conjg).add ((Fb o).mul P.rm (fb o).conjg),
-    memo 9 fun o => ((Gb o).normSqR P.rm).add ((Fb o).normSqR P.rm))
+def gramC {logn : ℕ} (k : RawKey logn) :
+    (Out logn → Cx f) × (Out logn → Cx f) × (Out logn → Cx f) :=
+  let fb := fftC P f logn k.f
+  let gb := fftC P f logn k.g
+  let Fb := fftC P f logn k.F
+  let Gb := fftC P f logn k.G
+  (memo logn fun o => ((gb o).normSqR P.rm).add ((fb o).normSqR P.rm),
+    memo logn fun o => ((Gb o).mul P.rm (gb o).conjg).add ((Fb o).mul P.rm (fb o).conjg),
+    memo logn fun o => ((Gb o).normSqR P.rm).add ((Fb o).normSqR P.rm))
 
-/-- **Key expansion**: the stored tree of a raw key. -/
-def expandC (k : RawKey) : CTree f 9 :=
+/-- **Key expansion**: the stored tree of a raw key of size `2^(L+1)`, leaves at `σq`. -/
+def expandC {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : CTree f (L + 1) :=
   let gr := gramC P f k
   let d11 := match P.root with
-    | .plain => d11C P f 9 gr.1 gr.2.1 gr.2.2
-    | .ntru => memo 9 fun o => (Cx.ofInt (12289 ^ 2)).divR P.rm P.dm (gr.1 o).re
-  ldlStepC P f 8 gr.1 gr.2.1 d11 (ldlC P f 8)
+    | .plain => d11C P f (L + 1) gr.1 gr.2.1 gr.2.2
+    | .ntru => memo (L + 1) fun o => (Cx.ofInt (12289 ^ 2)).divR P.rm P.dm (gr.1 o).re
+  ldlStepC P f L gr.1 gr.2.1 d11 fun a b c => ldlC P f L a b c σq
 
 /-! ## The same in balls -/
 
@@ -171,30 +173,33 @@ def d11B (L : ℕ) (g00 g10 g11 : Out L → CB f) : Out L → CB f :=
   memo L fun o => (g11 o).sub (CB.divR P.rm P.dm ((g10 o).normSq P.rm) (g00 o))
 
 /-- ffLDL⋆ in balls. -/
-def ldlB : (L : ℕ) → (g00 g10 g11 : Out L → CB f) → BTree f L
-  | 0, g00, _, _ => .leaf (CB.leaf P.rm P.rc σ512q (g00 ()))
-  | L + 1, g00, g10, g11 => ldlStepB P f L g00 g10 (d11B P f (L + 1) g00 g10 g11) (ldlB L)
+def ldlB : (L : ℕ) → (g00 g10 g11 : Out L → CB f) → optParam ℚ σ512q → BTree f L
+  | 0, g00, _, _, σq => .leaf (CB.leaf P.rm P.rc σq (g00 ()))
+  | L + 1, g00, g10, g11, σq =>
+    ldlStepB P f L g00 g10 (d11B P f (L + 1) g00 g10 g11) fun a b c => ldlB L a b c σq
 
 /-- The Gram matrix in balls. -/
-def gramB (k : RawKey) : (Out 9 → CB f) × (Out 9 → CB f) × (Out 9 → CB f) :=
-  let fb := fftB P f 9 k.f
-  let gb := fftB P f 9 k.g
-  let Fb := fftB P f 9 k.F
-  let Gb := fftB P f 9 k.G
-  (memo 9 fun o => ((gb o).normSq P.rm).add ((fb o).normSq P.rm),
-    memo 9 fun o => (CB.mul P.rm (Gb o) (gb o).conjg).add (CB.mul P.rm (Fb o) (fb o).conjg),
-    memo 9 fun o => ((Gb o).normSq P.rm).add ((Fb o).normSq P.rm))
+def gramB {logn : ℕ} (k : RawKey logn) :
+    (Out logn → CB f) × (Out logn → CB f) × (Out logn → CB f) :=
+  let fb := fftB P f logn k.f
+  let gb := fftB P f logn k.g
+  let Fb := fftB P f logn k.F
+  let Gb := fftB P f logn k.G
+  (memo logn fun o => ((gb o).normSq P.rm).add ((fb o).normSq P.rm),
+    memo logn fun o => (CB.mul P.rm (Gb o) (gb o).conjg).add (CB.mul P.rm (Fb o) (fb o).conjg),
+    memo logn fun o => ((Gb o).normSq P.rm).add ((Fb o).normSq P.rm))
 
 /-- `D11` at the root in balls. -/
-def rootB (gr : (Out 9 → CB f) × (Out 9 → CB f) × (Out 9 → CB f)) : Out 9 → CB f :=
+def rootB {logn : ℕ} (gr : (Out logn → CB f) × (Out logn → CB f) × (Out logn → CB f)) :
+    Out logn → CB f :=
   match P.root with
-  | .plain => d11B P f 9 gr.1 gr.2.1 gr.2.2
-  | .ntru => memo 9 fun o => CB.divR P.rm P.dm (CB.ofInt (12289 ^ 2)) (gr.1 o)
+  | .plain => d11B P f logn gr.1 gr.2.1 gr.2.2
+  | .ntru => memo logn fun o => CB.divR P.rm P.dm (CB.ofInt (12289 ^ 2)) (gr.1 o)
 
 /-- **Key expansion in balls.** -/
-def expandB (k : RawKey) : BTree f 9 :=
+def expandB {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : BTree f (L + 1) :=
   let gr := gramB P f k
-  ldlStepB P f 8 gr.1 gr.2.1 (rootB P f gr) (ldlB P f 8)
+  ldlStepB P f L gr.1 gr.2.1 (rootB P f gr) fun a b c => ldlB P f L a b c σq
 
 theorem fftB_centre : ∀ (L : ℕ) (a : Fin (2 ^ L) → ℤ) (o : Out L),
     (fftB P f L a o).c = fftC P f L a o
@@ -204,21 +209,32 @@ theorem fftB_centre : ∀ (L : ℕ) (a : Fin (2 ^ L) → ℤ) (o : Out L),
     simp only [fftB, fftC]; erw [memo_eq, memo_eq]
     cases b <;> simp only [Bool.false_eq_true, ↓reduceIte, CB.add, CB.sub, CB.mul, fftB_centre L]
 
-theorem ldlB_centre : ∀ (L : ℕ) (b00 b10 b11 : Out L → CB f),
-    (ldlB P f L b00 b10 b11).centre =
-      ldlC P f L (fun o => (b00 o).c) (fun o => (b10 o).c) (fun o => (b11 o).c)
+/-- `ldlB_centre` at every leaf constant `σq`. -/
+theorem ldlB_centreP (σq : ℚ) : ∀ (L : ℕ) (b00 b10 b11 : Out L → CB f),
+    (ldlB P f L b00 b10 b11 σq).centre =
+      ldlC P f L (fun o => (b00 o).c) (fun o => (b10 o).c) (fun o => (b11 o).c) σq
   | 0, _, _, _ => rfl
   | L + 1, _, _, _ => by
-    simp only [ldlB, ldlC, ldlStepB, ldlStepC, BTree.centre, ldlB_centre L, d11B, d11C, splitB,
-      splitC, memo_eq, CB.divR, CB.half, CB.add, CB.sub, CB.mul, CB.conjg, CB.normSq]
+    simp only [ldlB, ldlC, ldlStepB, ldlStepC, BTree.centre, ldlB_centreP σq L, d11B, d11C,
+      splitB, splitC, memo_eq, CB.divR, CB.half, CB.add, CB.sub, CB.mul, CB.conjg, CB.normSq]
 
-/-- The centres of `expandB` are the stored tree `expandC`. -/
-theorem expandB_centre (k : RawKey) : (expandB P f k).centre = expandC P f k := by
+theorem ldlB_centre : ∀ (L : ℕ) (b00 b10 b11 : Out L → CB f),
+    (ldlB P f L b00 b10 b11).centre =
+      ldlC P f L (fun o => (b00 o).c) (fun o => (b10 o).c) (fun o => (b11 o).c) :=
+  ldlB_centreP P f σ512q
+
+/-- `expandB_centre` at every size `2^(L+1)` and leaf constant `σq`. -/
+theorem expandB_centreP {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ) :
+    (expandB P f k σq).centre = expandC P f k σq := by
   obtain ⟨rm, rc, dm, root⟩ := P
   cases root <;>
   simp only [expandB, expandC, rootB, gramB, gramC, ldlStepB, ldlStepC, BTree.centre,
-    ldlB_centre, d11B, d11C, splitB, splitC, memo_eq, CB.divR, CB.half, CB.add, CB.sub, CB.mul,
+    ldlB_centreP, d11B, d11C, splitB, splitC, memo_eq, CB.divR, CB.half, CB.add, CB.sub, CB.mul,
     CB.conjg, CB.normSq, CB.ofInt, CB.exact, fftB_centre]
+
+/-- The centres of `expandB` are the stored tree `expandC`. -/
+theorem expandB_centre (k : RawKey) : (expandB P f k).centre = expandC P f k :=
+  expandB_centreP P f k σ512q
 
 /-! ## Storage at 64 fraction bits -/
 
@@ -255,12 +271,19 @@ variable (n : ℕ)
 
 /-- **The stored tree** (64 fraction bits): `expandC` at `64 + n` fraction bits, every value
 rounded once to 64 fraction bits by `P.rm`. -/
-def storeC (k : RawKey) : CTree 64 9 := (expandC P (64 + n) k).lower P.rm n
+def storeC {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : CTree 64 (L + 1) :=
+  (expandC P (64 + n) k σq).lower P.rm n
 
 /-- `storeC` in balls. -/
-def storeB (k : RawKey) : BTree 64 9 := (expandB P (64 + n) k).lower P.rm n
+def storeB {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ := σ512q) : BTree 64 (L + 1) :=
+  (expandB P (64 + n) k σq).lower P.rm n
 
-theorem storeB_centre (k : RawKey) : (storeB P n k).centre = storeC P n k := by
-  rw [storeB, storeC, BTree.centre_lower, expandB_centre]
+/-- `storeB_centre` at every size `2^(L+1)` and leaf constant `σq`. -/
+theorem storeB_centreP {L : ℕ} (k : RawKey (L + 1)) (σq : ℚ) :
+    (storeB P n k σq).centre = storeC P n k σq := by
+  rw [storeB, storeC, BTree.centre_lower, expandB_centreP]
+
+theorem storeB_centre (k : RawKey) : (storeB P n k).centre = storeC P n k :=
+  storeB_centreP P n k σ512q
 
 end FalconPrecision.Exec

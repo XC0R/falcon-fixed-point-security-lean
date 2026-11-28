@@ -1,0 +1,1 @@
+entry 11 delta43q_1024: refVecB1024 some; magOkBP sf32 true sf64 true mf32 true mf64 true; checkFast1024 xn0 false xn32 false

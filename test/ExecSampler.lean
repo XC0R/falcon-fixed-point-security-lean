@@ -232,3 +232,290 @@ info: 'FalconPrecision.Exec.exec_sampler_worlds_exist' depends on axioms:
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms exec_sampler_worlds_exist
+
+-- Falcon-1024: σ̄ = 1.29 is in SamplerZ's range at Falcon-512, not at Falcon-1024; σ̄ = 1.5 at both
+/-- info: (true, false, true) -/
+#guard_msgs in
+#eval (inRangeB falcon512S ⟨129 * 2 ^ 64 / 100⟩, inRangeB falcon1024S ⟨129 * 2 ^ 64 / 100⟩,
+  inRangeB falcon1024S ⟨3 * 2 ^ 63⟩)
+
+-- the Falcon-1024 law sums to 1 over ⌊t̄⌋ − 20 … ⌊t̄⌋ + 20 (σ̄ = 1.5, t̄ = 2.25)
+/-- info: true -/
+#guard_msgs in
+#eval
+  let σ : Fx 64 := ⟨3 * 2 ^ 63⟩
+  let t : Fx 64 := ⟨9 * 2 ^ 62⟩
+  ((List.range 41).map fun i => lawZ falcon1024S ⟨.plain, true, .b72⟩ σ t (i - 18 : ℤ)).sum == 1
+
+/--
+info: 'FalconPrecision.Exec.sminOk512' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sminOk512
+
+/--
+info: 'FalconPrecision.Exec.sminOk1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sminOk1024
+
+/--
+info: 'FalconPrecision.Exec.falcon512S_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms falcon512S_eq
+
+/--
+info: 'FalconPrecision.Exec.falcon1024S_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms falcon1024S_eq
+
+/--
+info: 'FalconPrecision.Exec.sampS_σmin' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sampS_σmin
+
+/--
+info: 'FalconPrecision.Exec.sampS_tab' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sampS_tab
+
+/--
+info: 'FalconPrecision.Exec.xOf_sampS' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms xOf_sampS
+
+/--
+info: 'FalconPrecision.Exec.accW_sampS' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms accW_sampS
+
+/--
+info: 'FalconPrecision.Exec.sampS_σ_pos' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sampS_σ_pos
+
+/--
+info: 'FalconPrecision.Exec.cand_boundsP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms cand_boundsP
+
+/--
+info: 'FalconPrecision.Exec.wsZP_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms wsZP_eq
+
+/--
+info: 'FalconPrecision.Exec.K0ZP_theta' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms K0ZP_theta
+
+/--
+info: 'FalconPrecision.Exec.wZz_outP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms wZz_outP
+
+/--
+info: 'FalconPrecision.Exec.AsZP_mem' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms AsZP_mem
+
+/--
+info: 'FalconPrecision.Exec.DZP_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms DZP_eq
+
+/--
+info: 'FalconPrecision.Exec.hws0P' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms hws0P
+
+/--
+info: 'FalconPrecision.Exec.sum_ws_candCP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sum_ws_candCP
+
+/--
+info: 'FalconPrecision.Exec.ws_le_EP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms ws_le_EP
+
+/--
+info: 'FalconPrecision.Exec.eps_ws_candCP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms eps_ws_candCP
+
+/--
+info: 'FalconPrecision.Exec.accZ_candCP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms accZ_candCP
+
+/--
+info: 'FalconPrecision.Exec.accZ_boundsP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms accZ_boundsP
+
+/--
+info: 'FalconPrecision.Exec.chi_finP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms chi_finP
+
+/--
+info: 'FalconPrecision.Exec.lawZ_closeP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms lawZ_closeP
+
+/--
+info: 'FalconPrecision.Exec.samplerZ_mgfP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms samplerZ_mgfP
+
+/--
+info: 'FalconPrecision.Exec.wZ_satP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms wZ_satP
+
+/--
+info: 'FalconPrecision.Exec.samplerZ_tvP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms samplerZ_tvP
+
+/--
+info: 'FalconPrecision.Exec.lawZ_close1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms lawZ_close1024
+
+/--
+info: 'FalconPrecision.Exec.samplerZ_mgf1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms samplerZ_mgf1024
+
+/--
+info: 'FalconPrecision.Exec.samplerZ_tv1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms samplerZ_tv1024
+
+/--
+info: 'FalconPrecision.Exec.simulateQ_sampQP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms simulateQ_sampQP
+
+/--
+info: 'FalconPrecision.Exec.simulateQ_ffsXP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms simulateQ_ffsXP
+
+/--
+info: 'FalconPrecision.Exec.implZ_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms implZ_eq
+
+/--
+info: 'FalconPrecision.Exec.pathSum_sampQP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms pathSum_sampQP
+
+/--
+info: 'FalconPrecision.Exec.pathSum_ffsXP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms pathSum_ffsXP
+
+/--
+info: 'FalconPrecision.Exec.sampler_hopP' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sampler_hopP
+
+/--
+info: 'FalconPrecision.Exec.sampler_hop1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms sampler_hop1024
+
+/--
+info: 'FalconPrecision.Exec.thresh_samplerE' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms thresh_samplerE
+
+/--
+info: 'FalconPrecision.Exec.thresh_sampler1024' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms thresh_sampler1024
+
+/--
+info: 'FalconPrecision.Exec.thresh_sampler1024_256' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms thresh_sampler1024_256

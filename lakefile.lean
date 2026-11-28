@@ -22,4 +22,5 @@ lean_lib Axioms where
   srcDir := "test"
   roots := #[`Axioms, `EndToEnd, `S7Axioms, `ExecFixedPoint, `ExecFixedPointAxioms, `ExecKeyCheck,
     `ExecSign, `ExecCheckFast, `ExecRound3, `ExecInstance45, `ExecSampler, `ExecEquiv,
-    `ExecCodec, `ExecRefVec]
+    `ExecCodec, `ExecFalcon1024, `ExecRefVec, `Compat050, `Compat050Exec, `Compat050Defs,
+    `ErrorsFalcon1024, `ExecSampler1024, `ExecSampKeyCheck, `ExecEquiv1024]

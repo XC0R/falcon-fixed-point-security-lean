@@ -131,6 +131,14 @@ def falcon512S : SampParams where
     | .b72 => tab72
     | .b79 => tab79
 
+/-- `falcon512S` with `σmin := c`; Falcon-512 and Falcon-1024 differ in SamplerZ only by `σmin`
+(spec Table 3.3, p. 51). -/
+def sampS (c : ℚ) : SampParams := { falcon512S with σmin := c }
+
+/-- Falcon-1024: `σmin = 1.298280334`, `σmax = 1.8205` (spec Table 3.3, p. 51), the rest as
+`falcon512S`. -/
+def falcon1024S : SampParams := sampS (1298280334 / 1000000000)
+
 /-- `σ̄` in SamplerZ's range `[σmin, σmax]` (spec Alg. 11 l. 2, p. 40). -/
 def inRangeB (P : SampParams) (σ : Fx 64) : Bool :=
   decide (P.σmin ≤ σ.toRat) && decide (σ.toRat ≤ P.σmax)

@@ -15,7 +15,8 @@ A nearest rule `r` (ties to even, up or away) is a `Rnd` (`RMode.toRnd`), and `R
 of `Cx 64` its fields `mul`, `halve` (at `u = 2⁻⁶⁴`) and `divq` are the executable `Cx.mul`,
 `Cx.half` and `Cx.divq` (`arith64_mul`, `arith64_halve`, `arith64_divq`). Not executable here: the
 twiddle tables `tw`, `tws` are `ζ` and `ζ̄/2` rounded by `r` at 64 fractional bits, as values in
-`ℂ`; an executable table equal to them is not provided. `floor` is not a `Rnd`
+`ℂ`; `Twiddle.twB`, `twsB` are executable tables certified within a computed radius of `ζ`, `ζ̄/2`
+(`twOk` checks `≤ 0.7072·2⁻⁶⁴`), not proved equal to these values. `floor` is not a `Rnd`
 (`RMode.not_isRound_floor`), so `RMode.arith64` requires `r ≠ floor`. -/
 
 @[expose] public section

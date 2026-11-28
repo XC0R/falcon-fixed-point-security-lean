@@ -5,8 +5,8 @@ import ExecRound3
 /-! `FalconPrecision.Exec.Codec`, `.Verify`, `.CodecKat`: bit orders, fields, Compress/Decompress
 on small inputs; entry 0 of the round-3 `falcon512-KAT.rsp` (sha256 `dd75c946…7354b5cd`) passes
 `entryOkB`; HashToPoint on entries 0 and 70 equals `wC0`, `wC70` (Python `hashlib`); the 15
-correctness theorems of `Codec` and `Verify`, and `entryOk_of`, `entriesOk_of`, depend only on the
-standard axioms. -/
+correctness theorems of `Codec` and `Verify`, the checked verifier's, and `entryOk_of`,
+`entriesOk_of`, depend only on the standard axioms. -/
 
 open FalconPrecision.Exec.Codec FalconPrecision.Exec.Witness
 
@@ -244,6 +244,26 @@ info: 'FalconPrecision.Exec.Codec.verifyCore_iff' depends on axioms:
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms verifyCore_iff
+
+-- the checked verifier's theorems use only the standard axioms
+/--
+info: 'FalconPrecision.Exec.Codec.verifyCoreChecked_iff' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms verifyCoreChecked_iff
+/--
+info: 'FalconPrecision.Exec.Codec.verifyCoreChecked_eq' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms verifyCoreChecked_eq
+/--
+info: 'FalconPrecision.Exec.Codec.verifyCoreChecked_spec' depends on axioms:
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms verifyCoreChecked_spec
 
 -- `entryOk_of`, `entriesOk_of` (`CodecKat`) use only the standard axioms
 /--
